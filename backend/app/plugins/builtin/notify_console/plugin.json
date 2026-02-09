@@ -1,0 +1,35 @@
+{
+  "id": "notify_console",
+  "name": "控制台通知",
+  "version": "1.0.0",
+  "type": "extension",
+  "author": {"name": "LecFaka"},
+  "description": "在控制台打印订单和用户事件日志，用于调试和监控。这是一个示范插件，展示如何使用钩子系统。",
+  "icon": null,
+  "min_app_version": "1.0.0",
+  "license_required": false,
+  "price": 0,
+  "backend": {
+    "entry": "handler:ConsoleNotifyPlugin",
+    "hooks": ["order.created", "order.paid", "order.delivered", "user.registered"]
+  },
+  "frontend": {
+    "entry": null
+  },
+  "config_schema": {
+    "log_level": {
+      "type": "select",
+      "label": "日志级别",
+      "options": ["info", "debug"],
+      "default": "info"
+    },
+    "emoji_enabled": {
+      "type": "boolean",
+      "label": "启用表情符号",
+      "default": true
+    }
+  },
+  "changelog": {
+    "1.0.0": "初始版本 - 控制台通知示范插件"
+  }
+}

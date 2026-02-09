@@ -1,0 +1,38 @@
+{
+  "id": "payment_usdt",
+  "name": "USDT支付",
+  "version": "1.0.0",
+  "type": "payment",
+  "author": {"name": "LecFaka", "url": ""},
+  "description": "USDT/TRC20 加密货币支付",
+  "icon": null,
+  "min_app_version": "1.0.0",
+  "license_required": false,
+  "price": 0,
+  "backend": {
+    "entry": "handler:USDTPaymentPlugin",
+    "hooks": [],
+    "routes": false,
+    "models": false
+  },
+  "frontend": {
+    "entry": null
+  },
+  "config_schema": {
+    "wallet_address": {
+      "type": "string",
+      "label": "收款钱包地址 (TRC20)",
+      "required": true,
+      "placeholder": "TXxxxx..."
+    },
+    "api_url": {
+      "type": "string",
+      "label": "USDT验证API地址",
+      "required": false,
+      "placeholder": "https://api.example.com"
+    }
+  },
+  "changelog": {
+    "1.0.0": "从核心代码迁移为插件"
+  }
+}

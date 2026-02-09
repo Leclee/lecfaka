@@ -1,0 +1,217 @@
+"""
+支付回调接口
+"""
+
+import json
+import logging
+from datetime import datetime
+
+from fastapi import APIRouter, Request
+from fastapi.responses import PlainTextResponse
+from sqlalchemy import select, func
+
+from ..deps import DbSession
+from ...models.order import Order
+from ...models.card import Card
+from ...models.commodity import Commodity
+from ...models.user import User
+from ...models.payment import PaymentMethod
+from ...payments import get_payment_handler as legacy_get_handler
+from ...plugins import plugin_manager, PAYMENT_HANDLERS
+from ...plugins.sdk.payment_base import PaymentPluginBase
+from ...plugins.sdk.hooks import hooks, Events
+
+logger = logging.getLogger("payments.callback")
+router = APIRouter()
+
+
+async def _handle_callback(handler: str, request: Request, db):
+    """通用支付回调处理"""
+    
+    # 1. 获取回调数据
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        data = await request.json()
+    else:
+        form = await request.form()
+        data = dict(form)
+    data.update(dict(request.query_params))
+    
+    logger.info(f"Payment callback [{handler}]: {data}")
+    
+    # 2. 查找支付处理器并实例化
+    payment_instance = None
+    
+    # 先查插件系统中已启用的实例
+    pi = plugin_manager.get_plugin(handler)
+    if pi and pi.instance and isinstance(pi.instance, PaymentPluginBase):
+        payment_instance = pi.instance
+    
+    if not payment_instance:
+        # 从插件注册表查找类
+        payment_class = PAYMENT_HANDLERS.get(handler)
+        if not payment_class:
+            # Fallback 旧模块
+            payment_class = legacy_get_handler(handler)
+        
+        if not payment_class:
+            return "unknown handler"
+        
+        # 获取配置
+        result = await db.execute(
+            select(PaymentMethod).where(PaymentMethod.handler == handler).limit(1)
+        )
+        payment_method = result.scalar_one_or_none()
+        if not payment_method:
+            return "payment not configured"
+        
+        config = json.loads(payment_method.config) if payment_method.config else {}
+        
+        # 实例化
+        from ...payments.base import PaymentBase as LegacyPaymentBase
+        from ...plugins.sdk.base import PluginMeta
+        
+        if issubclass(payment_class, PaymentPluginBase):
+            meta = PluginMeta(id=handler, name="", version="1.0.0", type="payment")
+            payment_instance = payment_class(meta, config)
+        elif issubclass(payment_class, LegacyPaymentBase):
+            payment_instance = payment_class(config)
+        else:
+            return "invalid handler"
+    
+    # 3. 验证回调签名和数据
+    callback_result = await payment_instance.verify_callback(data)
+    if not callback_result.success:
+        logger.warning(f"Callback verify failed [{handler}]: {callback_result.error_msg}")
+        return payment_instance.get_callback_response(False)
+    
+    # 4. 查找订单
+    result = await db.execute(
+        select(Order).where(Order.trade_no == callback_result.trade_no)
+    )
+    order = result.scalar_one_or_none()
+    if not order:
+        logger.warning(f"Order not found: {callback_result.trade_no}")
+        return payment_instance.get_callback_response(False)
+    
+    # 5. 避免重复处理
+    if order.status != 0:
+        return payment_instance.get_callback_response(True)
+    
+    # 6. 验证金额
+    if abs(float(order.amount) - callback_result.amount) > 0.01:
+        logger.warning(
+            f"Amount mismatch: order={order.amount}, callback={callback_result.amount}"
+        )
+        return payment_instance.get_callback_response(False)
+    
+    # 7. 更新订单状态为已支付
+    order.status = 1
+    order.paid_at = datetime.utcnow()
+    order.external_trade_no = callback_result.external_trade_no
+    
+    # 8. 钩子：支付成功
+    await hooks.emit(Events.ORDER_PAID, {"order": order, "callback_data": data})
+    
+    # 9. 发货
+    result = await db.execute(
+        select(Commodity).where(Commodity.id == order.commodity_id)
+    )
+    commodity = result.scalar_one_or_none()
+    
+    if commodity and commodity.delivery_way == 0:
+        # 自动发货 - 拉取卡密
+        card_query = (
+            select(Card)
+            .where(Card.commodity_id == commodity.id)
+            .where(Card.status == 0)
+        )
+        if order.race:
+            card_query = card_query.where(Card.race == order.race)
+        
+        if commodity.delivery_auto_mode == 0:
+            card_query = card_query.order_by(Card.id.asc())
+        elif commodity.delivery_auto_mode == 1:
+            card_query = card_query.order_by(func.random())
+        else:
+            card_query = card_query.order_by(Card.id.desc())
+        
+        card_query = card_query.limit(order.quantity)
+        cards_result = await db.execute(card_query)
+        cards = cards_result.scalars().all()
+        
+        if len(cards) >= order.quantity:
+            secrets = []
+            for card in cards:
+                card.status = 1
+                card.order_id = order.id
+                card.sold_at = datetime.utcnow()
+                secrets.append(card.secret)
+            order.secret = "\n".join(secrets)
+            order.delivery_status = 1
+        else:
+            order.secret = "库存不足，请联系客服"
+            order.delivery_status = 0
+    elif commodity:
+        # 手动发货
+        order.secret = commodity.delivery_message or "您的订单正在处理中，请耐心等待..."
+        order.delivery_status = 0
+    
+    # 10. 钩子：发货完成
+    await hooks.emit(Events.ORDER_DELIVERED, {"order": order, "secret": order.secret})
+    
+    # 11. 累计用户消费
+    if order.user_id:
+        result = await db.execute(select(User).where(User.id == order.user_id))
+        user = result.scalar_one_or_none()
+        if user:
+            user.total_recharge = float(user.total_recharge or 0) + float(order.amount)
+    
+    await db.commit()
+    
+    logger.info(f"Order {order.trade_no} paid and delivered successfully")
+    return payment_instance.get_callback_response(True)
+
+
+@router.post("/{handler}/callback", response_class=PlainTextResponse, summary="支付回调")
+async def payment_callback(handler: str, request: Request, db: DbSession):
+    """通用支付回调接口（POST）"""
+    return await _handle_callback(handler, request, db)
+
+
+@router.get("/{handler}/callback", response_class=PlainTextResponse, summary="支付回调(GET)")
+async def payment_callback_get(handler: str, request: Request, db: DbSession):
+    """通用支付回调接口（GET，部分支付平台使用）"""
+    return await _handle_callback(handler, request, db)
+
+
+@router.get("/{handler}/return", summary="支付同步跳转")
+async def payment_return(handler: str, request: Request, db: DbSession):
+    """
+    支付完成后浏览器同步跳转 (return_url)。
+    验证签名、处理订单，然后 302 跳转到前端订单详情页。
+    """
+    from fastapi.responses import RedirectResponse
+    from ...utils.request import get_base_url
+
+    # 获取参数
+    data = dict(request.query_params)
+    logger.info(f"Payment return [{handler}]: {data}")
+
+    out_trade_no = data.get("out_trade_no", "")
+    trade_status = data.get("trade_status", "")
+
+    # 构建前端订单页 URL（从请求头自动检测域名）
+    base_url = get_base_url(request)
+    frontend_url = f"{base_url}/order/{out_trade_no}"
+
+    # 如果支付成功，尝试走回调逻辑处理订单
+    if trade_status == "TRADE_SUCCESS" and out_trade_no:
+        try:
+            result = await _handle_callback(handler, request, db)
+            logger.info(f"Payment return callback result: {result}")
+        except Exception as e:
+            logger.error(f"Payment return callback error: {e}")
+
+    # 无论如何都跳转到前端订单页
+    return RedirectResponse(url=frontend_url, status_code=302)

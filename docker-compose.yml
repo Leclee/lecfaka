@@ -1,0 +1,114 @@
+# LecFaka Docker Compose 配置
+#
+# 用法：
+#   开发环境（仅 DB + Redis + Adminer）：
+#     docker compose --profile dev up -d
+#
+#   生产环境（全部服务）：
+#     docker compose --profile prod up -d
+#
+#   仅基础设施（DB + Redis）：
+#     docker compose up -d
+
+services:
+  # ==================== 基础设施（始终启动） ====================
+
+  # PostgreSQL 数据库
+  db:
+    image: postgres:18-alpine
+    container_name: lecfaka-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-lecfaka}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-lecfaka123}
+      POSTGRES_DB: ${DB_NAME:-lecfaka}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-lecfaka}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: lecfaka-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==================== 开发环境专用 ====================
+
+  # Adminer 数据库管理界面
+  adminer:
+    image: adminer
+    container_name: lecfaka-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    profiles: ["dev"]
+
+  # ==================== 生产环境专用 ====================
+
+  # 后端 API
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: lecfaka-backend
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-lecfaka}:${DB_PASSWORD:-lecfaka123}@db:5432/${DB_NAME:-lecfaka}
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-this-jwt-key}
+      - APP_ENV=production
+      - DEBUG=false
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles: ["prod"]
+
+  # 前端（Nginx + 静态文件）
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: lecfaka-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    profiles: ["prod"]
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: lecfaka-network
