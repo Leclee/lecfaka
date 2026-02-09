@@ -1,6 +1,7 @@
-import { Routes, Route } from 'react-router-dom'
-import { Suspense, lazy } from 'react'
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { Spin } from 'antd'
+import api from './api'
 
 // 页面懒加载
 const Install = lazy(() => import('./pages/Install'))
@@ -51,6 +52,32 @@ const Loading = () => (
 )
 
 function App() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [checking, setChecking] = useState(true)
+
+  useEffect(() => {
+    // 跳过 /install 页面本身的检查，避免死循环
+    if (location.pathname === '/install') {
+      setChecking(false)
+      return
+    }
+    api.get<{ installed: boolean }>('/install/status')
+      .then((data) => {
+        if (!data.installed) {
+          navigate('/install', { replace: true })
+        }
+      })
+      .catch(() => {
+        // 网络错误不阻断
+      })
+      .finally(() => setChecking(false))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (checking && location.pathname !== '/install') {
+    return <Loading />
+  }
+
   return (
     <Suspense fallback={<Loading />}>
       <Routes>

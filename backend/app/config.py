@@ -35,11 +35,6 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7
     
-    # 默认管理员（首次启动自动创建）
-    admin_username: str = "admin"
-    admin_password: str = "admin123"
-    admin_email: str = "admin@lecfaka.com"
-    
     # 插件商店服务器地址
     store_url: str = "https://store.lecfaka.com"
     

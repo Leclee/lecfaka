@@ -14,7 +14,7 @@ from ...database import get_db
 from ...models.user import User
 from ...models.config import SystemConfig
 from ...core.security import get_password_hash
-from ...core.exceptions import ValidationError
+from ...core.exceptions import ValidationError, AuthorizationError
 
 router = APIRouter()
 
@@ -62,7 +62,7 @@ async def do_install(
     仅在未安装时可调用，已安装后此接口返回 403。
     """
     if await _is_installed(db):
-        raise ValidationError("系统已安装，无法重复安装")
+        raise AuthorizationError("系统已安装，无法重复安装")
 
     # 检查用户名是否存在
     result = await db.execute(
@@ -91,7 +91,7 @@ async def do_install(
     # 保存站点名称
     await SystemConfig.set_value(db, "site_name", request.site_name)
 
-    await db.commit()
+    # get_db 依赖会自动 commit，无需手动调用
 
     return {
         "success": True,
