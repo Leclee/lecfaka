@@ -226,9 +226,9 @@ async def payment_return(handler: str, request: Request, db: DbSession):
     out_trade_no = data.get("out_trade_no", "")
     trade_status = data.get("trade_status", "")
 
-    # 构建前端订单页 URL（从请求头自动检测域名）
+    # 构建前端订单查询页 URL（从请求头自动检测域名）
     base_url = get_base_url(request)
-    frontend_url = f"{base_url}/order/{out_trade_no}"
+    frontend_url = f"{base_url}/query?trade_no={out_trade_no}"
 
     # 如果支付成功，尝试走回调逻辑处理订单
     if trade_status == "TRADE_SUCCESS" and out_trade_no:

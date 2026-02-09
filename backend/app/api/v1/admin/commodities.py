@@ -291,6 +291,10 @@ async def get_commodities(
     result = await db.execute(query)
     commodities = result.scalars().all()
     
+    # 预加载分类名称
+    cat_result = await db.execute(select(Category))
+    cat_map = {c.id: c.name for c in cat_result.scalars().all()}
+    
     items = []
     for c in commodities:
         # 统计库存
@@ -306,6 +310,7 @@ async def get_commodities(
             "name": c.name,
             "cover": c.cover,
             "category_id": c.category_id,
+            "category_name": cat_map.get(c.category_id, ""),
             "price": float(c.price),
             "user_price": float(c.user_price),
             "stock": stock,

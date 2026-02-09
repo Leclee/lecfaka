@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { 
   Table, Button, Space, Modal, Form, Input, InputNumber, Switch, 
   Select, message, Popconfirm, Card, Typography, Tag, Row, Col, 
@@ -136,17 +136,21 @@ function IconUploader({ value, onChange }: { value?: string; onChange?: (v: stri
 
 // 批量优惠配置组件
 function WholesaleConfig({ value, onChange }: { value?: string; onChange?: (v: string) => void }) {
-  const [items, setItems] = useState<{ quantity: number; price: number }[]>([])
+  const [items, setItems] = useState<{ quantity: number; price: number }[]>(() => {
+    if (value) {
+      try { return JSON.parse(value) } catch { return [] }
+    }
+    return []
+  })
+  const lastValueRef = useRef(value)
 
   useEffect(() => {
-    if (value) {
-      try {
-        setItems(JSON.parse(value))
-      } catch {
-        setItems([])
+    // 仅在外部 value 真正变化时才同步（避免 tab 切换导致的 undefined 闪烁）
+    if (value !== lastValueRef.current) {
+      lastValueRef.current = value
+      if (value) {
+        try { setItems(JSON.parse(value)) } catch { /* keep current */ }
       }
-    } else {
-      setItems([])
     }
   }, [value])
 
