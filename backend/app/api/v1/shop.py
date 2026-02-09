@@ -524,8 +524,7 @@ async def create_order(
         return_url=cb_base,
     )
     
-    await db.commit()
-    
+    # OrderService.create_order() 内部已 commit，无需重复
     return result
 
 

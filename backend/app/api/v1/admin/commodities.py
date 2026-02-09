@@ -401,6 +401,10 @@ async def create_commodity(
     db.add(commodity)
     await db.flush()
     
+    # 钩子：商品创建
+    from ....plugins.sdk.hooks import hooks, Events
+    await hooks.emit(Events.COMMODITY_CREATED, {"commodity": commodity})
+    
     return {"id": commodity.id, "message": "创建成功"}
 
 

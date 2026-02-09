@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import PaymentMethod
-from ..payments import PAYMENT_HANDLERS
+from ..payments import PAYMENT_HANDLERS as LEGACY_HANDLERS
 
 
 class PaymentService:
@@ -68,15 +68,29 @@ class PaymentService:
         return items
     
     def get_supported_handlers(self) -> List[Dict[str, Any]]:
-        """获取支持的支付处理器列表"""
-        handlers = []
+        """获取支持的支付处理器列表（合并插件系统和旧模块）"""
+        from ..plugins import PAYMENT_HANDLERS as PLUGIN_HANDLERS
         
-        for handler_id, handler_class in PAYMENT_HANDLERS.items():
+        handlers = []
+        seen = set()
+        
+        # 插件系统优先
+        for handler_id, handler_class in PLUGIN_HANDLERS.items():
             handlers.append({
                 "id": handler_id,
-                "name": handler_class.name,
-                "channels": handler_class.channels,
+                "name": getattr(handler_class, "name", handler_id),
+                "channels": getattr(handler_class, "channels", {}),
             })
+            seen.add(handler_id)
+        
+        # 旧模块 fallback
+        for handler_id, handler_class in LEGACY_HANDLERS.items():
+            if handler_id not in seen:
+                handlers.append({
+                    "id": handler_id,
+                    "name": getattr(handler_class, "name", handler_id),
+                    "channels": getattr(handler_class, "channels", {}),
+                })
         
         return handlers
     

@@ -180,5 +180,13 @@ async def complete_recharge(
             order_trade_no=order.trade_no,
         )
         db.add(bill)
+        
+        # 钩子：用户充值
+        from ....plugins.sdk.hooks import hooks, Events
+        await hooks.emit(Events.USER_RECHARGED, {
+            "user": user,
+            "recharge_order": order,
+            "amount": float(order.actual_amount),
+        })
     
     return {"message": "操作成功"}

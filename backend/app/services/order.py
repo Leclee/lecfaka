@@ -1,10 +1,14 @@
 """
 订单服务
 处理订单创建、支付、发货等核心业务逻辑
+
+注意: 此模块是订单创建的唯一入口，API 层应委托给此服务。
 """
 
+import json as json_lib
+import logging
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, Dict, Any, List
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,8 +22,10 @@ from ..core.exceptions import (
     PaymentError, InsufficientBalanceError
 )
 from ..core.security import generate_trade_no
-from ..payments import get_payment_handler, PaymentResult
 from ..plugins.sdk.hooks import hooks, Events
+from ..plugins.sdk.payment_base import PaymentPluginBase
+
+logger = logging.getLogger("services.order")
 
 
 class OrderService:
@@ -39,59 +45,137 @@ class OrderService:
         coupon_code: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        计算订单金额
+        计算订单金额（使用 Decimal 避免精度丢失）。
+        
+        支持：基础价格、用户价、用户组折扣、种类定价、批发规则、
+        预选加价、优惠券抵扣。
         
         Returns:
             {
-                "amount": 订单金额,
-                "unit_price": 单价,
-                "coupon_discount": 优惠券抵扣,
-                "draft_premium": 预选加价,
+                "amount": Decimal 订单金额,
+                "unit_price": Decimal 单价,
+                "coupon_discount": Decimal 优惠券抵扣,
+                "draft_premium": Decimal 预选加价,
             }
         """
+        TWO_PLACES = Decimal("0.01")
+        
         # 基础价格
         if user:
-            unit_price = float(commodity.user_price)
+            unit_price = Decimal(str(commodity.user_price))
         else:
-            unit_price = float(commodity.price)
+            unit_price = Decimal(str(commodity.price))
         
         # 用户组折扣
         if user_group and commodity.level_disable != 1:
-            discount = float(user_group.discount)
+            discount = Decimal(str(user_group.discount))
             if discount > 0:
-                unit_price = unit_price * (1 - discount)
+                unit_price = unit_price * (Decimal("1") - discount)
         
-        # TODO: 解析商品配置中的批发价格
-        # TODO: 解析会员等级自定义价格
+        # 解析商品配置中的种类定价和批发规则
+        if commodity.config and race:
+            unit_price = self._apply_config_pricing(
+                commodity.config, unit_price, race, quantity
+            )
         
         amount = unit_price * quantity
-        draft_premium = 0
-        coupon_discount = 0
+        draft_premium = Decimal("0")
+        coupon_discount = Decimal("0")
         
         # 预选加价
         if card_id and commodity.draft_status == 1:
-            draft_premium = float(commodity.draft_premium)
+            draft_premium = Decimal(str(commodity.draft_premium))
             amount += draft_premium
         
         # 优惠券
         if coupon_code:
-            coupon = await self._validate_coupon(coupon_code, commodity, amount)
+            coupon = await self._validate_coupon(
+                coupon_code, commodity, float(amount)
+            )
             if coupon:
                 if coupon.mode == 0:  # 固定金额
-                    coupon_discount = float(coupon.money)
+                    coupon_discount = Decimal(str(coupon.money))
                 else:  # 按件优惠
-                    coupon_discount = float(coupon.money) * quantity
+                    coupon_discount = Decimal(str(coupon.money)) * quantity
                 amount -= coupon_discount
         
         # 保留两位小数
-        amount = round(amount, 2)
+        amount = amount.quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
+        unit_price = unit_price.quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
         
         return {
             "amount": amount,
-            "unit_price": round(unit_price, 2),
-            "coupon_discount": round(coupon_discount, 2),
+            "unit_price": unit_price,
+            "coupon_discount": coupon_discount.quantize(TWO_PLACES),
             "draft_premium": draft_premium,
         }
+    
+    @staticmethod
+    def _apply_config_pricing(
+        config_text: str,
+        base_price: Decimal,
+        race: str,
+        quantity: int,
+    ) -> Decimal:
+        """
+        解析商品 config 中的种类定价和批发规则。
+        
+        格式：
+            [category]
+            种类A=10.00
+            
+            [category_wholesale]
+            种类A.10=9.00        # 买10件及以上，单价9.00
+            种类A.50=80%         # 买50件及以上，打八折
+        """
+        category_price = base_price
+        wholesale_rules = []
+        
+        current_section = None
+        for line in config_text.strip().split("\n"):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("[") and line.endswith("]"):
+                current_section = line[1:-1].lower()
+            elif "=" in line and current_section:
+                key, value = line.split("=", 1)
+                key, value = key.strip(), value.strip()
+                
+                if current_section == "category" and key == race:
+                    try:
+                        category_price = Decimal(value)
+                    except Exception:
+                        pass
+                        
+                elif current_section == "category_wholesale" and "." in key:
+                    cat_name, qty_str = key.split(".", 1)
+                    if cat_name == race:
+                        try:
+                            qty = int(qty_str)
+                            if value.endswith("%"):
+                                wholesale_rules.append(
+                                    (qty, "percent", Decimal(value[:-1]))
+                                )
+                            else:
+                                wholesale_rules.append(
+                                    (qty, "fixed", Decimal(value))
+                                )
+                        except (ValueError, Exception):
+                            pass
+        
+        # 应用批发规则（取最大匹配数量的规则）
+        unit_price = category_price
+        if wholesale_rules:
+            wholesale_rules.sort(key=lambda x: x[0])
+            for min_qty, rule_type, rule_val in wholesale_rules:
+                if quantity >= min_qty:
+                    if rule_type == "percent":
+                        unit_price = category_price * rule_val / Decimal("100")
+                    else:
+                        unit_price = rule_val
+        
+        return unit_price
     
     async def create_order(
         self,
@@ -111,7 +195,7 @@ class OrderService:
         return_url: str = "",
     ) -> Dict[str, Any]:
         """
-        创建订单
+        创建订单（统一入口）。
         
         Returns:
             {
@@ -119,6 +203,8 @@ class OrderService:
                 "amount": 金额,
                 "status": 状态,
                 "payment_url": 支付链接,
+                "payment_type": 支付类型,
+                "extra": 额外信息,
                 "secret": 卡密(余额支付时),
             }
         """
@@ -159,8 +245,17 @@ class OrderService:
         if ctx.cancelled:
             raise ValidationError(ctx.cancel_reason or "订单创建被拦截")
         
-        # 8. 创建订单
-        trade_no = generate_trade_no()
+        # 8. 创建订单（trade_no 冲突时自动重试，数据库 UNIQUE 约束兜底）
+        for _retry in range(3):
+            trade_no = generate_trade_no()
+            exists = await self.db.execute(
+                select(Order.id).where(Order.trade_no == trade_no).limit(1)
+            )
+            if not exists.scalar_one_or_none():
+                break
+        else:
+            trade_no = generate_trade_no()  # 最后一搏
+        
         order = Order(
             trade_no=trade_no,
             user_id=user.id if user else None,
@@ -174,20 +269,20 @@ class OrderService:
             card_id=card_id,
             widget=str(widget) if widget else None,
             owner_id=commodity.owner_id,
-            rent=float(commodity.factory_price) * quantity,
+            rent=Decimal(str(commodity.factory_price)) * quantity,
             create_ip=client_ip,
             create_device=device,
             status=0,
             delivery_status=0,
         )
         
-        # 8. 处理优惠券
+        # 处理优惠券
         if coupon_code:
             coupon = await self._use_coupon(coupon_code, trade_no)
             if coupon:
                 order.coupon_id = coupon.id
         
-        # 9. 处理推广关系
+        # 处理推广关系
         if user and user.parent_id:
             order.from_user_id = user.parent_id
         
@@ -201,12 +296,14 @@ class OrderService:
             "user": user,
         })
         
-        # 10. 处理支付
+        # 9. 处理支付
         result = {
             "trade_no": trade_no,
-            "amount": price_info["amount"],
+            "amount": float(price_info["amount"]),
             "status": 0,
             "payment_url": None,
+            "payment_type": None,
+            "extra": {},
             "secret": None,
         }
         
@@ -214,7 +311,7 @@ class OrderService:
         if payment_method.handler == "#balance":
             if not user:
                 raise PaymentError("余额支付需要登录")
-            await self._pay_with_balance(order, user)
+            await self._pay_with_balance(order, user, commodity)
             secret = await self.deliver_order(order)
             result["status"] = 1
             result["secret"] = secret
@@ -226,17 +323,40 @@ class OrderService:
             await hooks.emit(Events.ORDER_DELIVERED, {
                 "order": order, "secret": secret,
             })
+            
+            # 佣金 + 累计消费
+            await self._process_commission(order)
+            await self._accumulate_recharge(order)
         else:
             # 第三方支付
             payment_result = await self._create_payment(
-                order, payment_method, callback_url, return_url, client_ip
+                order, payment_method, callback_url, return_url,
+                client_ip, commodity.name,
             )
             if payment_result.success:
-                order.pay_url = payment_result.payment_url or payment_result.qrcode_url
-                result["payment_url"] = order.pay_url
-                result["payment_type"] = payment_result.payment_type.value
-                result["extra"] = payment_result.extra
+                pay_url = payment_result.payment_url
+                p_type = payment_result.payment_type.value
+                extra = payment_result.extra or {}
+                
+                # 二维码模式
+                if p_type == "qrcode" and payment_result.qrcode_url:
+                    pay_url = payment_result.qrcode_url
+                    extra["qrcode_url"] = payment_result.qrcode_url
+                
+                # 表单模式
+                if payment_result.form_action:
+                    pay_url = payment_result.form_action
+                    p_type = "form"
+                    extra = {"form_data": payment_result.form_data}
+                
+                order.pay_url = pay_url or payment_result.qrcode_url
+                result["payment_url"] = pay_url
+                result["payment_type"] = p_type
+                result["extra"] = extra
+            else:
+                raise PaymentError(f"支付创建失败: {payment_result.error_msg}")
         
+        result["amount"] = float(order.amount)
         await self.db.commit()
         return result
     
@@ -245,28 +365,52 @@ class OrderService:
         handler: str,
         data: Dict[str, Any]
     ) -> str:
-        """处理支付回调"""
-        # 获取支付处理器
-        payment_class = get_payment_handler(handler)
-        if not payment_class:
-            return "unknown handler"
+        """
+        处理支付回调。
         
-        # 获取支付配置
-        result = await self.db.execute(
-            select(PaymentMethod).where(PaymentMethod.handler == handler).limit(1)
-        )
-        payment_method = result.scalar_one_or_none()
-        if not payment_method:
-            return "payment not configured"
+        注意: 实际的回调入口在 api/v1/payments.py，此方法已不推荐直接使用。
+        保留是为了向后兼容，已升级为支持插件系统。
+        """
+        from ..plugins import plugin_manager, PAYMENT_HANDLERS as PLUGIN_HANDLERS
+        from ..payments.base import PaymentBase as LegacyPaymentBase
         
-        import json
-        config = json.loads(payment_method.config) if payment_method.config else {}
-        payment = payment_class(config)
+        payment_instance = None
+        
+        # 查找支付处理器（插件系统优先）
+        pi = plugin_manager.get_plugin(handler)
+        if pi and pi.instance and isinstance(pi.instance, PaymentPluginBase):
+            payment_instance = pi.instance
+        
+        if not payment_instance:
+            payment_class = PLUGIN_HANDLERS.get(handler)
+            if not payment_class:
+                from ..payments import get_payment_handler as legacy_get
+                payment_class = legacy_get(handler)
+            if not payment_class:
+                return "unknown handler"
+            
+            result = await self.db.execute(
+                select(PaymentMethod).where(PaymentMethod.handler == handler).limit(1)
+            )
+            payment_method = result.scalar_one_or_none()
+            if not payment_method:
+                return "payment not configured"
+            
+            config = json_lib.loads(payment_method.config) if payment_method.config else {}
+            
+            if issubclass(payment_class, PaymentPluginBase):
+                from ..plugins.sdk.base import PluginMeta
+                meta = PluginMeta(id=handler, name="", version="1.0.0", type="payment")
+                payment_instance = payment_class(meta, config)
+            elif issubclass(payment_class, LegacyPaymentBase):
+                payment_instance = payment_class(config)
+            else:
+                return "invalid handler"
         
         # 验证回调
-        callback_result = await payment.verify_callback(data)
+        callback_result = await payment_instance.verify_callback(data)
         if not callback_result.success:
-            return payment.get_callback_response(False)
+            return payment_instance.get_callback_response(False)
         
         # 查找订单
         result = await self.db.execute(
@@ -275,50 +419,33 @@ class OrderService:
         order = result.scalar_one_or_none()
         
         if not order:
-            return payment.get_callback_response(False)
+            return payment_instance.get_callback_response(False)
         
         # 检查状态
         if order.status != 0:
-            return payment.get_callback_response(True)
+            return payment_instance.get_callback_response(True)
         
         # 验证金额
         if abs(float(order.amount) - callback_result.amount) > 0.01:
-            return payment.get_callback_response(False)
+            return payment_instance.get_callback_response(False)
         
         # 完成订单
         order.status = 1
         order.paid_at = datetime.utcnow()
         order.external_trade_no = callback_result.external_trade_no
         
-        # 钩子：支付成功
-        await hooks.emit(Events.ORDER_PAID, {
-            "order": order,
-            "callback_data": data,
-        })
+        # 钩子
+        await hooks.emit(Events.ORDER_PAID, {"order": order, "callback_data": data})
         
-        # 发货
         secret = await self.deliver_order(order)
+        await hooks.emit(Events.ORDER_DELIVERED, {"order": order, "secret": secret})
         
-        # 钩子：发货完成
-        await hooks.emit(Events.ORDER_DELIVERED, {
-            "order": order,
-            "secret": secret,
-        })
-        
-        # 处理佣金
+        # 佣金 + 累计消费（Decimal 精度）
         await self._process_commission(order)
-        
-        # 累计用户充值
-        if order.user_id:
-            result = await self.db.execute(
-                select(User).where(User.id == order.user_id)
-            )
-            user = result.scalar_one_or_none()
-            if user:
-                user.total_recharge = float(user.total_recharge) + float(order.amount)
+        await self._accumulate_recharge(order)
         
         await self.db.commit()
-        return payment.get_callback_response(True)
+        return payment_instance.get_callback_response(True)
     
     async def deliver_order(self, order: Order) -> str:
         """发货"""
@@ -540,21 +667,28 @@ class OrderService:
         
         return coupon
     
-    async def _pay_with_balance(self, order: Order, user: User):
-        """余额支付"""
-        if float(user.balance) < float(order.amount):
-            raise InsufficientBalanceError()
+    async def _pay_with_balance(
+        self, order: Order, user: User, commodity: Commodity
+    ):
+        """余额支付（Decimal 精度）"""
+        balance = Decimal(str(user.balance))
+        amount = Decimal(str(order.amount))
+        
+        if balance < amount:
+            raise InsufficientBalanceError(
+                f"余额不足，当前余额: {balance}，需要: {amount}"
+            )
         
         # 扣除余额
-        user.balance = float(user.balance) - float(order.amount)
+        user.balance = balance - amount
         
         # 记录账单
         bill = Bill(
             user_id=user.id,
-            amount=float(order.amount),
-            balance=float(user.balance),
+            amount=amount,
+            balance=user.balance,
             type=0,
-            description=f"商品购买[{order.trade_no}]",
+            description=f"购买商品[{commodity.name}]",
             order_trade_no=order.trade_no,
         )
         self.db.add(bill)
@@ -570,69 +704,123 @@ class OrderService:
         callback_url: str,
         return_url: str,
         client_ip: Optional[str],
-    ) -> PaymentResult:
-        """创建第三方支付"""
-        payment_class = get_payment_handler(payment_method.handler)
-        if not payment_class:
-            raise PaymentError("支付方式未实现")
+        product_name: str = "",
+    ):
+        """
+        创建第三方支付。
+        支持插件系统 (PaymentPluginBase) 和旧模块 (PaymentBase)。
+        """
+        from ..plugins import plugin_manager, PAYMENT_HANDLERS
         
-        import json
-        config = json.loads(payment_method.config) if payment_method.config else {}
-        payment = payment_class(config)
+        handler_id = payment_method.handler
+        payment_instance = None
         
-        # 添加手续费
-        amount = float(order.amount)
-        if payment_method.cost > 0:
-            if payment_method.cost_type == 0:
-                order.pay_cost = float(payment_method.cost)
+        # 1. 先查插件系统中已启用的实例
+        pi = plugin_manager.get_plugin(handler_id)
+        if pi and pi.instance and isinstance(pi.instance, PaymentPluginBase):
+            payment_instance = pi.instance
+        
+        # 2. 从插件注册表或旧模块查找类
+        if not payment_instance:
+            payment_class = PAYMENT_HANDLERS.get(handler_id)
+            if not payment_class:
+                from ..payments import get_payment_handler as legacy_get
+                payment_class = legacy_get(handler_id)
+            
+            if not payment_class:
+                raise PaymentError(f"支付方式 {handler_id} 未找到处理器")
+            
+            config = json_lib.loads(payment_method.config) if payment_method.config else {}
+            
+            from ..payments.base import PaymentBase as LegacyPaymentBase
+            if issubclass(payment_class, PaymentPluginBase):
+                from ..plugins.sdk.base import PluginMeta
+                meta = PluginMeta(
+                    id=handler_id, name=payment_method.name,
+                    version="1.0.0", type="payment",
+                )
+                payment_instance = payment_class(meta, config)
+            elif issubclass(payment_class, LegacyPaymentBase):
+                payment_instance = payment_class(config)
             else:
-                order.pay_cost = amount * float(payment_method.cost)
-            amount += float(order.pay_cost)
-            order.amount = round(amount, 2)
+                raise PaymentError(f"支付方式 {handler_id} 类型无效")
         
-        # 拼接完整的回调路径
-        notify_url = f"{callback_url.rstrip('/')}/api/v1/payments/{payment_method.handler}/callback"
-        sync_return_url = f"{return_url.rstrip('/')}/api/v1/payments/{payment_method.handler}/return"
+        # 3. 添加手续费
+        amount = Decimal(str(order.amount))
+        cost = Decimal(str(payment_method.cost or 0))
+        if cost > 0:
+            if payment_method.cost_type == 0:
+                order.pay_cost = cost
+            else:
+                order.pay_cost = (amount * cost).quantize(Decimal("0.01"))
+            amount += Decimal(str(order.pay_cost))
+            order.amount = amount.quantize(Decimal("0.01"))
         
-        return await payment.create_payment(
+        # 4. 拼接回调 URL
+        cb = callback_url.rstrip("/")
+        notify_url = f"{cb}/api/v1/payments/{handler_id}/callback"
+        sync_return = f"{cb}/api/v1/payments/{handler_id}/return"
+        
+        # 5. 钩子：支付创建前（可拦截）
+        ctx = await hooks.emit(Events.PAYMENT_CREATING, {
+            "order": order,
+            "payment_method": payment_method,
+            "amount": float(order.amount),
+        })
+        if ctx.cancelled:
+            raise PaymentError(ctx.cancel_reason or "支付创建被拦截")
+        
+        # 6. 调用支付接口
+        return await payment_instance.create_payment(
             trade_no=order.trade_no,
             amount=float(order.amount),
             callback_url=notify_url,
-            return_url=sync_return_url,
-            channel=payment_method.code,
+            return_url=sync_return,
+            channel=payment_method.code or "alipay",
             client_ip=client_ip,
+            product_name=product_name,
         )
     
     async def _process_commission(self, order: Order):
-        """处理分销佣金"""
+        """处理分销佣金（Decimal 精度）"""
         if not order.from_user_id:
             return
         
-        # 获取推广人
         result = await self.db.execute(
             select(User).where(User.id == order.from_user_id)
         )
         promoter = result.scalar_one_or_none()
-        
         if not promoter:
             return
         
-        # TODO: 实现三级分销逻辑
-        # 这里简化为单级返佣10%
-        rebate_rate = 0.1
-        rebate = float(order.amount) * rebate_rate
+        # 单级返佣 10%
+        rebate_rate = Decimal("0.1")
+        rebate = (Decimal(str(order.amount)) * rebate_rate).quantize(Decimal("0.01"))
         
-        if rebate >= 0.01:
-            promoter.balance = float(promoter.balance) + rebate
+        if rebate >= Decimal("0.01"):
+            promoter.balance = Decimal(str(promoter.balance)) + rebate
             order.rebate = rebate
             
-            # 记录账单
             bill = Bill(
                 user_id=promoter.id,
                 amount=rebate,
-                balance=float(promoter.balance),
+                balance=promoter.balance,
                 type=1,
                 description=f"推广返佣[{order.trade_no}]",
                 order_trade_no=order.trade_no,
             )
             self.db.add(bill)
+    
+    async def _accumulate_recharge(self, order: Order):
+        """累计用户消费（Decimal 精度）"""
+        if not order.user_id:
+            return
+        result = await self.db.execute(
+            select(User).where(User.id == order.user_id)
+        )
+        user = result.scalar_one_or_none()
+        if user:
+            user.total_recharge = (
+                Decimal(str(user.total_recharge or 0))
+                + Decimal(str(order.amount))
+            )

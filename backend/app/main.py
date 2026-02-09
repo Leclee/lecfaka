@@ -67,7 +67,24 @@ async def lifespan(app: FastAPI):
     # 触发应用启动事件
     await hooks.emit(Events.APP_STARTUP, {"app": app})
     
+    # 启动定时授权验证后台任务（每 24 小时）
+    import asyncio
+    
+    async def _license_verify_loop():
+        while True:
+            await asyncio.sleep(86400)  # 24 小时
+            try:
+                await plugin_manager.verify_all_licenses()
+                print("[OK] Scheduled license verification completed")
+            except Exception as e:
+                print(f"[WARN] License verification error: {e}")
+    
+    license_task = asyncio.create_task(_license_verify_loop())
+    
     yield
+    
+    # 取消后台任务
+    license_task.cancel()
     
     # 触发关闭事件
     await hooks.emit(Events.APP_SHUTDOWN)

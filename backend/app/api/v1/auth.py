@@ -18,6 +18,7 @@ from ...core.security import (
     verify_token,
 )
 from ...core.exceptions import ValidationError, AuthenticationError
+from ...plugins.sdk.hooks import hooks, Events
 
 
 router = APIRouter()
@@ -129,6 +130,9 @@ async def register(
     db.add(user)
     await db.flush()
     
+    # 钩子：用户注册
+    await hooks.emit(Events.USER_REGISTERED, {"user": user, "ip": req.client.host if req.client else None})
+    
     # 生成Token
     token_data = {"sub": str(user.id)}
     access_token = create_access_token(token_data)
@@ -174,6 +178,9 @@ async def login(
     # 更新登录信息
     user.last_login_at = datetime.utcnow()
     user.last_login_ip = req.client.host if req.client else None
+    
+    # 钩子：用户登录
+    await hooks.emit(Events.USER_LOGIN, {"user": user, "ip": req.client.host if req.client else None})
     
     # 生成Token
     token_data = {"sub": str(user.id)}

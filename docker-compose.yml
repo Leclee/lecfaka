@@ -23,16 +23,16 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-lecfaka123}
       POSTGRES_DB: ${DB_NAME:-lecfaka}
     volumes:
-      - postgres_data:/var/lib/postgresql
+      - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-127.0.0.1:5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-lecfaka}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Redis 缓存
+  # Redis 缓存（用于 session 缓存 + USDT 支付金额锁定）
   redis:
     image: redis:7-alpine
     container_name: lecfaka-redis
@@ -41,7 +41,7 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-127.0.0.1:6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -50,7 +50,6 @@ services:
 
   # ==================== 开发环境专用 ====================
 
-  # Adminer 数据库管理界面
   adminer:
     image: adminer
     container_name: lecfaka-adminer
@@ -75,10 +74,14 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-this-jwt-key}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@lecfaka.com}
+      - STORE_URL=${STORE_URL:-https://store.lecfaka.com}
       - APP_ENV=production
       - DEBUG=false
-    ports:
-      - "8000:8000"
+    volumes:
+      - upload_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -91,7 +94,7 @@ services:
       retries: 3
     profiles: ["prod"]
 
-  # 前端（Nginx + 静态文件）
+  # 前端（Nginx + 静态文件 + API 反代）
   frontend:
     build:
       context: .
@@ -99,7 +102,7 @@ services:
     container_name: lecfaka-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "${HTTP_PORT:-80}:80"
     depends_on:
       backend:
         condition: service_healthy
@@ -108,7 +111,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
-
-networks:
-  default:
-    name: lecfaka-network
+  upload_data:

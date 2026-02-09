@@ -215,6 +215,13 @@ async def import_cards(
     
     await db.flush()
     
+    # 钩子：卡密导入
+    from ....plugins.sdk.hooks import hooks, Events
+    await hooks.emit(Events.CARD_IMPORTED, {
+        "commodity_id": request.commodity_id,
+        "count": created_count,
+    })
+    
     return {
         "message": f"成功导入 {created_count} 条卡密",
         "count": created_count,

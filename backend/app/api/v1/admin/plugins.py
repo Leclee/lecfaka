@@ -17,13 +17,26 @@ from ....database import get_db
 from ....api.deps import get_current_admin
 from ....models.plugin import Plugin
 from ....plugins import plugin_manager
-from ....plugins.license_client import verify_license, get_store_plugins, download_plugin
+from ....plugins.license_client import verify_license, get_store_plugins, download_plugin, check_updates, APP_VERSION
 from ....utils.request import get_base_url
 
 router = APIRouter()
 
 
-# ============== 商店代理（必须在 /{plugin_id} 路由之前注册，避免被通配符抢先匹配） ==============
+# ============== 版本检查 + 商店代理（必须在 /{plugin_id} 路由之前注册） ==============
+
+@router.get("/check-updates")
+async def get_updates(
+    admin=Depends(get_current_admin),
+):
+    """检查主程序和已安装插件的更新"""
+    installed = {}
+    for pi in plugin_manager.get_all_plugins():
+        installed[pi.meta.id] = pi.meta.version
+    result = await check_updates(installed)
+    result["app_version"] = APP_VERSION
+    return result
+
 
 @router.get("/store")
 async def proxy_store(

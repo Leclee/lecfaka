@@ -119,9 +119,10 @@ class UserService:
         )
         self.db.add(bill)
         
-        # 累计充值
+        # 累计充值（Decimal 精度）
         if amount > 0 and currency == 0:
-            user.total_recharge = float(user.total_recharge) + amount
+            from decimal import Decimal
+            user.total_recharge = Decimal(str(user.total_recharge or 0)) + Decimal(str(amount))
         
         return {"balance": balance_after}
     

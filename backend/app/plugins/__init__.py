@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .sdk.base import PluginBase, PluginMeta
 from .sdk.hooks import hooks
 from .sdk.payment_base import PaymentPluginBase
+from .sdk.notify_base import NotifyPluginBase
+from .sdk.delivery_base import DeliveryPluginBase
 
 logger = logging.getLogger("plugins.manager")
 
@@ -239,6 +241,12 @@ class PluginManager:
         if pi.meta.type == "payment" and isinstance(instance, PaymentPluginBase):
             PAYMENT_HANDLERS[pi.meta.id] = pi.plugin_class
             logger.info(f"  Registered payment handler: {pi.meta.id}")
+        elif pi.meta.type == "notify" and isinstance(instance, NotifyPluginBase):
+            NOTIFY_HANDLERS[pi.meta.id] = instance
+            logger.info(f"  Registered notify handler: {pi.meta.id}")
+        elif pi.meta.type == "delivery" and isinstance(instance, DeliveryPluginBase):
+            DELIVERY_HANDLERS[pi.meta.id] = instance
+            logger.info(f"  Registered delivery handler: {pi.meta.id}")
 
     async def enable_plugin(self, plugin_id: str, db: AsyncSession) -> bool:
         """启用插件（API 调用）"""
@@ -277,6 +285,10 @@ class PluginManager:
         # 按类型注销
         if pi.meta.type == "payment":
             PAYMENT_HANDLERS.pop(plugin_id, None)
+        elif pi.meta.type == "notify":
+            NOTIFY_HANDLERS.pop(plugin_id, None)
+        elif pi.meta.type == "delivery":
+            DELIVERY_HANDLERS.pop(plugin_id, None)
 
         await pi.instance.on_disable()
         pi.enabled = False
@@ -336,6 +348,47 @@ class PluginManager:
     def get_payment_handler(self, handler_id: str):
         """获取支付处理器类（兼容旧接口）"""
         return PAYMENT_HANDLERS.get(handler_id)
+
+    async def verify_all_licenses(self):
+        """
+        验证所有需要授权的已启用插件。
+        由定时后台任务每 24 小时调用一次。
+        """
+        from .license_client import verify_license
+
+        for plugin_id, pi in self._plugins.items():
+            if not pi.meta.license_required or not pi.enabled:
+                continue
+
+            # 从数据库获取 license_key 和 domain
+            license_key = ""
+            domain = ""
+            try:
+                from ..database import async_session_maker
+                from ..models.plugin import Plugin as PluginModel
+                async with async_session_maker() as db:
+                    result = await db.execute(
+                        select(PluginModel).where(PluginModel.plugin_id == plugin_id)
+                    )
+                    db_plugin = result.scalar_one_or_none()
+                    if db_plugin and db_plugin.license_key:
+                        license_key = db_plugin.license_key
+                        domain = db_plugin.license_domain or ""
+            except Exception as e:
+                logger.error(f"License DB query error for {plugin_id}: {e}")
+                continue
+
+            if not license_key:
+                continue
+
+            # 向 store 服务器验证
+            try:
+                result = await verify_license(plugin_id, license_key, domain)
+                valid = result.get("valid", False)
+                pi.license_status = 1 if valid else 0
+                logger.info(f"License verify {plugin_id}: {'OK' if valid else result.get('message', 'FAILED')}")
+            except Exception as e:
+                logger.error(f"License verify error for {plugin_id}: {e}")
 
 
 # 全局单例

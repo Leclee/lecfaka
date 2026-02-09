@@ -99,11 +99,16 @@ def verify_token(token: str, token_type: str = "access") -> Optional[dict]:
 
 
 def generate_trade_no() -> str:
-    """生成18位订单号"""
+    """
+    生成18位订单号。
+    
+    格式: 13位毫秒时间戳 + 5位随机数 = 18位。
+    数据库 trade_no 列有 UNIQUE 约束作为最终兜底。
+    使用 secrets 替代 random 以获得更好的随机性。
+    """
     import time
-    import random
     timestamp = int(time.time() * 1000)  # 13位毫秒时间戳
-    random_part = random.randint(10000, 99999)  # 5位随机数
+    random_part = secrets.randbelow(90000) + 10000  # 10000-99999
     return f"{timestamp}{random_part}"
 
 

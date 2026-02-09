@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     debug: bool = True
     secret_key: str = "change-this-in-production"
     
-    # 数据库配置
-    database_url: str = "postgresql+asyncpg://user:password@localhost:5432/lecfaka"
+    # 数据库配置（默认值与 docker-compose.yml 一致）
+    database_url: str = "postgresql+asyncpg://lecfaka:lecfaka123@localhost:5432/lecfaka"
     
     # Redis配置
     redis_url: str = "redis://localhost:6379/0"

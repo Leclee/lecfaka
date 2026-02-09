@@ -9,9 +9,8 @@ asyncpg>=0.29.0  # PostgreSQL异步驱动
 aiomysql>=0.2.0  # MySQL异步驱动(可选)
 alembic>=1.13.1
 
-# 缓存
+# 缓存（redis>=4.2 已内置 redis.asyncio，不再需要 aioredis）
 redis>=5.0.1
-aioredis>=2.0.1
 
 # 认证
 python-jose[cryptography]>=3.3.0
@@ -40,7 +39,6 @@ aiosmtplib>=3.0.1
 # 开发测试
 pytest>=7.4.4
 pytest-asyncio>=0.23.3
-httpx>=0.26.0
 
 # 日志
 loguru>=0.7.2

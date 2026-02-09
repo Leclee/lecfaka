@@ -110,7 +110,8 @@ async def _handle_callback(handler: str, request: Request, db):
     order.paid_at = datetime.utcnow()
     order.external_trade_no = callback_result.external_trade_no
     
-    # 8. 钩子：支付成功
+    # 8. 钩子：支付回调 + 支付成功
+    await hooks.emit(Events.PAYMENT_CALLBACK, {"order": order, "handler": handler, "callback_data": data})
     await hooks.emit(Events.ORDER_PAID, {"order": order, "callback_data": data})
     
     # 9. 发货
@@ -160,12 +161,36 @@ async def _handle_callback(handler: str, request: Request, db):
     # 10. 钩子：发货完成
     await hooks.emit(Events.ORDER_DELIVERED, {"order": order, "secret": order.secret})
     
-    # 11. 累计用户消费
+    # 11. 处理分销佣金（Decimal 精度）
+    if order.from_user_id:
+        from decimal import Decimal
+        from ...models.bill import Bill
+        promoter_result = await db.execute(
+            select(User).where(User.id == order.from_user_id)
+        )
+        promoter = promoter_result.scalar_one_or_none()
+        if promoter:
+            rebate = (Decimal(str(order.amount)) * Decimal("0.1")).quantize(Decimal("0.01"))
+            if rebate >= Decimal("0.01"):
+                promoter.balance = Decimal(str(promoter.balance)) + rebate
+                order.rebate = rebate
+                bill = Bill(
+                    user_id=promoter.id,
+                    amount=rebate,
+                    balance=promoter.balance,
+                    type=1,
+                    description=f"推广返佣[{order.trade_no}]",
+                    order_trade_no=order.trade_no,
+                )
+                db.add(bill)
+    
+    # 12. 累计用户消费（Decimal 精度）
     if order.user_id:
+        from decimal import Decimal as D
         result = await db.execute(select(User).where(User.id == order.user_id))
         user = result.scalar_one_or_none()
         if user:
-            user.total_recharge = float(user.total_recharge or 0) + float(order.amount)
+            user.total_recharge = D(str(user.total_recharge or 0)) + D(str(order.amount))
     
     await db.commit()
     

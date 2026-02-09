@@ -15,6 +15,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
@@ -26,8 +27,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 复制应用代码
 COPY backend/ .
 
-# 创建非 root 用户
-RUN adduser --disabled-password --gecos '' appuser && \
+# 创建 uploads 目录和非 root 用户
+RUN mkdir -p /app/uploads && \
+    adduser --disabled-password --gecos '' appuser && \
     chown -R appuser:appuser /app
 USER appuser
 

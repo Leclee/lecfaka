@@ -1,12 +1,19 @@
 """
-授权客户端 - 与 lecfaka-store 授权服务器通信
+授权客户端 - 与远程插件商店 (lecfaka-store) 通信
+
+商店是独立部署的中心化服务，所有发卡网实例通过 STORE_URL 远程连接。
 """
 
+import logging
 import httpx
 from typing import Optional, Dict, Any
 
 from ..config import settings
 
+logger = logging.getLogger("plugins.store_client")
+
+# 主程序版本号（用于更新检查）
+APP_VERSION = "1.0.0"
 
 STORE_URL = getattr(settings, "store_url", None) or "https://store.lecfaka.com"
 
@@ -66,3 +73,38 @@ async def download_plugin(plugin_id: str, license_key: str = "") -> Optional[byt
             return None
     except Exception:
         return None
+
+
+async def check_updates(installed_plugins: Dict[str, str]) -> Dict[str, Any]:
+    """
+    向商店检查主程序和插件更新。
+
+    Args:
+        installed_plugins: {"plugin_id": "version", ...}
+
+    Returns:
+        {
+            "plugin_updates": [{"id", "name", "current_version", "latest_version"}, ...],
+            "app_update": {"latest_version", "current_version", "message"} or None,
+        }
+    """
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{STORE_URL}/api/v1/store/check-updates",
+                json={
+                    "plugins": installed_plugins,
+                    "app_version": APP_VERSION,
+                },
+            )
+            data = resp.json()
+            updates = data.get("plugin_updates", [])
+            app_update = data.get("app_update")
+            if updates:
+                logger.info(f"Available plugin updates: {[u['id'] for u in updates]}")
+            if app_update:
+                logger.info(f"App update available: {app_update['latest_version']}")
+            return data
+    except Exception as e:
+        logger.debug(f"Update check failed: {e}")
+        return {"plugin_updates": [], "app_update": None}
