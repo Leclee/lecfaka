@@ -309,14 +309,28 @@ class PluginManager:
     async def update_plugin_config(
         self, plugin_id: str, config: Dict, db: AsyncSession
     ) -> bool:
-        """更新插件配置"""
+        """更新插件配置（重新创建实例以刷新缓存的配置值）"""
         pi = self._plugins.get(plugin_id)
         if not pi:
             return False
 
         pi.config = config
-        if pi.instance:
-            pi.instance.config = config
+
+        # 如果插件已启用，重新创建实例以刷新 __init__ 中缓存的配置
+        if pi.enabled and pi.instance:
+            try:
+                await pi.instance.on_disable()
+            except Exception:
+                pass
+            hooks.off_by_owner(plugin_id)
+            if pi.meta.type == "payment":
+                PAYMENT_HANDLERS.pop(plugin_id, None)
+            elif pi.meta.type == "notify":
+                NOTIFY_HANDLERS.pop(plugin_id, None)
+            elif pi.meta.type == "delivery":
+                DELIVERY_HANDLERS.pop(plugin_id, None)
+            await self._enable_plugin_internal(pi)
+            logger.info(f"Plugin {plugin_id} re-initialized with new config")
 
         # 持久化
         from ..models.plugin import Plugin
