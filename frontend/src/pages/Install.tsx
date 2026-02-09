@@ -13,6 +13,12 @@ import api from '../api'
 
 const { Title, Text, Paragraph } = Typography
 
+interface AdminData {
+  username: string
+  password: string
+  email?: string
+}
+
 export default function Install() {
   const navigate = useNavigate()
   const [current, setCurrent] = useState(0)
@@ -21,9 +27,9 @@ export default function Install() {
   const [installed, setInstalled] = useState(false)
   const [adminForm] = Form.useForm()
   const [siteForm] = Form.useForm()
+  const [adminData, setAdminData] = useState<AdminData | null>(null)
   const [result, setResult] = useState<{ admin_username: string } | null>(null)
 
-  // 检查安装状态
   useEffect(() => {
     checkStatus()
   }, [])
@@ -35,25 +41,28 @@ export default function Install() {
         setInstalled(true)
       }
     } catch {
-      // 网络错误不阻断，允许继续
+      // ignore
     } finally {
       setLoading(false)
     }
   }
 
   const handleInstall = async () => {
-    try {
-      const adminValues = adminForm.getFieldsValue()
-      const siteValues = siteForm.getFieldsValue()
+    if (!adminData) {
+      message.error('请先填写管理员信息')
+      setCurrent(1)
+      return
+    }
 
+    try {
+      const siteValues = siteForm.getFieldsValue()
       setSubmitting(true)
       const data = await api.post<{ success: boolean; admin_username: string }>('/install', {
-        admin_username: adminValues.username,
-        admin_password: adminValues.password,
-        admin_email: adminValues.email || null,
+        admin_username: adminData.username,
+        admin_password: adminData.password,
+        admin_email: adminData.email || null,
         site_name: siteValues.site_name || 'LecFaka',
       })
-
       setResult(data)
       setCurrent(3)
       message.success('安装完成')
@@ -67,7 +76,8 @@ export default function Install() {
   const nextStep = async () => {
     if (current === 1) {
       try {
-        await adminForm.validateFields()
+        const values = await adminForm.validateFields()
+        setAdminData({ username: values.username, password: values.password, email: values.email })
         setCurrent(2)
       } catch {
         // validation failed
@@ -147,7 +157,12 @@ export default function Install() {
         {current === 1 && (
           <div className="max-w-md mx-auto">
             <Title level={4} className="text-center !mb-6">创建管理员账号</Title>
-            <Form form={adminForm} layout="vertical" size="large">
+            <Form
+              form={adminForm}
+              layout="vertical"
+              size="large"
+              initialValues={adminData ? { username: adminData.username, email: adminData.email } : undefined}
+            >
               <Form.Item
                 name="username"
                 label="管理员用户名"
@@ -225,19 +240,10 @@ export default function Install() {
             title="安装完成"
             subTitle={`管理员账号 ${result.admin_username} 已创建成功`}
             extra={[
-              <Button
-                type="primary"
-                size="large"
-                key="login"
-                onClick={() => navigate('/login')}
-              >
+              <Button type="primary" size="large" key="login" onClick={() => navigate('/login')}>
                 前往登录
               </Button>,
-              <Button
-                size="large"
-                key="home"
-                onClick={() => navigate('/')}
-              >
+              <Button size="large" key="home" onClick={() => navigate('/')}>
                 访问首页
               </Button>,
             ]}
