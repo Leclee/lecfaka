@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import {
-  Card, Table, Button, Tag, Typography, Space, Switch,
-  Modal, Form, Input, message, Tabs, Descriptions, Badge, Empty
+  Card, Button, Tag, Typography, Space, Switch,
+  Modal, Form, Input, message, Tabs, Badge, Empty
 } from 'antd'
 import {
   AppstoreOutlined, SettingOutlined, CheckCircleOutlined,
-  CloseCircleOutlined, LockOutlined, ApiOutlined,
+  LockOutlined, ApiOutlined,
   NotificationOutlined, SkinOutlined, ThunderboltOutlined,
   RocketOutlined
 } from '@ant-design/icons'
@@ -60,7 +60,7 @@ const typeColors: Record<string, string> = {
 
 export default function Plugins() {
   const [plugins, setPlugins] = useState<PluginInfo[]>([])
-  const [loading, setLoading] = useState(false)
+  const [, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('all')
   const [configModal, setConfigModal] = useState<PluginInfo | null>(null)
   const [configForm] = Form.useForm()
