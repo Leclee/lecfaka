@@ -23,16 +23,26 @@ class CreateCategoryRequest(BaseModel):
     """创建分类请求"""
     name: str = Field(..., min_length=1, max_length=100)
     icon: Optional[str] = None
+    description: Optional[str] = None
     sort: int = 0
     status: int = 1
+    level_config: Optional[str] = None
 
 
 class UpdateCategoryRequest(BaseModel):
     """更新分类请求"""
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     icon: Optional[str] = None
+    description: Optional[str] = None
     sort: Optional[int] = None
     status: Optional[int] = None
+    level_config: Optional[str] = None
+
+
+class BatchCategoryRequest(BaseModel):
+    """批量操作分类请求"""
+    ids: List[int] = Field(..., min_length=1)
+    action: str = Field(..., description="enable / disable / delete")
 
 
 class CreateCommodityRequest(BaseModel):
@@ -81,22 +91,42 @@ class UpdateCommodityRequest(BaseModel):
 async def get_categories(
     admin: CurrentAdmin,
     db: DbSession,
+    status: Optional[int] = Query(None, description="状态筛选 0=隐藏 1=显示"),
+    keyword: Optional[str] = Query(None, description="分类名称搜索"),
 ):
-    """获取所有分类"""
-    result = await db.execute(
-        select(Category)
-        .where(Category.owner_id.is_(None))
-        .order_by(Category.sort.asc())
-    )
+    """获取所有分类（支持筛选和搜索）"""
+    from ....models.user import User
+    
+    query = select(Category).order_by(Category.sort.asc(), Category.id.asc())
+    
+    if status is not None:
+        query = query.where(Category.status == status)
+    if keyword:
+        query = query.where(Category.name.contains(keyword))
+    
+    result = await db.execute(query)
     categories = result.scalars().all()
+    
+    # 批量获取 owner 用户名
+    owner_ids = [c.owner_id for c in categories if c.owner_id]
+    owner_map = {}
+    if owner_ids:
+        owners_result = await db.execute(
+            select(User.id, User.username).where(User.id.in_(owner_ids))
+        )
+        owner_map = {row.id: row.username for row in owners_result.all()}
     
     return {"items": [
         {
             "id": c.id,
             "name": c.name,
             "icon": c.icon,
+            "description": c.description,
             "sort": c.sort,
             "status": c.status,
+            "owner_id": c.owner_id,
+            "owner_name": owner_map.get(c.owner_id, "主站") if c.owner_id else "主站",
+            "level_config": c.level_config,
             "created_at": c.created_at.isoformat() if c.created_at else None,
         }
         for c in categories
@@ -113,8 +143,10 @@ async def create_category(
     category = Category(
         name=request.name,
         icon=request.icon,
+        description=request.description,
         sort=request.sort,
         status=request.status,
+        level_config=request.level_config,
         owner_id=None,
     )
     db.add(category)
@@ -143,10 +175,14 @@ async def update_category(
         category.name = request.name
     if request.icon is not None:
         category.icon = request.icon
+    if request.description is not None:
+        category.description = request.description
     if request.sort is not None:
         category.sort = request.sort
     if request.status is not None:
         category.status = request.status
+    if request.level_config is not None:
+        category.level_config = request.level_config
     
     return {"message": "更新成功"}
 
@@ -176,6 +212,49 @@ async def delete_category(
     
     await db.delete(category)
     return {"message": "删除成功"}
+
+
+@router.post("/categories/batch", summary="批量操作分类")
+async def batch_update_categories(
+    request: BatchCategoryRequest,
+    admin: CurrentAdmin,
+    db: DbSession,
+):
+    """批量启用/停用/删除分类"""
+    result = await db.execute(
+        select(Category).where(Category.id.in_(request.ids))
+    )
+    categories = result.scalars().all()
+    
+    if not categories:
+        raise NotFoundError("未找到指定分类")
+    
+    if request.action == "enable":
+        for c in categories:
+            c.status = 1
+        return {"message": f"已启用 {len(categories)} 个分类"}
+    
+    elif request.action == "disable":
+        for c in categories:
+            c.status = 0
+        return {"message": f"已停用 {len(categories)} 个分类"}
+    
+    elif request.action == "delete":
+        # 检查是否有商品
+        for c in categories:
+            count_result = await db.execute(
+                select(func.count()).select_from(Commodity)
+                .where(Commodity.category_id == c.id)
+            )
+            if count_result.scalar() > 0:
+                raise ValidationError(f"分类「{c.name}」下还有商品，无法删除")
+        
+        for c in categories:
+            await db.delete(c)
+        return {"message": f"已删除 {len(categories)} 个分类"}
+    
+    else:
+        raise ValidationError("无效的操作类型")
 
 
 # ============== Commodity APIs ==============

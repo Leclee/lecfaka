@@ -37,6 +37,10 @@ const AdminCoupons = lazy(() => import('./pages/Admin/Coupons'))
 const AdminBills = lazy(() => import('./pages/Admin/Bills'))
 const AdminPlugins = lazy(() => import('./pages/Admin/Plugins'))
 const AdminLogs = lazy(() => import('./pages/Admin/Logs'))
+const AdminStore = lazy(() => import('./pages/Admin/Store'))
+const AdminPaymentPlugins = lazy(() => import('./pages/Admin/PaymentPlugins'))
+const AdminPaymentSettings = lazy(() => import('./pages/Admin/PaymentSettings'))
+const AdminGeneralPlugins = lazy(() => import('./pages/Admin/GeneralPlugins'))
 
 // 加载组件
 const Loading = () => (
@@ -84,6 +88,10 @@ function App() {
           <Route path="bills" element={<AdminBills />} />
           <Route path="logs" element={<AdminLogs />} />
           <Route path="plugins" element={<AdminPlugins />} />
+          <Route path="store" element={<AdminStore />} />
+          <Route path="payment-plugins" element={<AdminPaymentPlugins />} />
+          <Route path="payment-settings" element={<AdminPaymentSettings />} />
+          <Route path="general-plugins" element={<AdminGeneralPlugins />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>
       </Routes>

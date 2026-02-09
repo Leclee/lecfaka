@@ -10,7 +10,8 @@ import {
   LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
   TagOutlined, GiftOutlined, BellOutlined, WalletOutlined,
   BankOutlined, CrownOutlined, DollarOutlined, FileTextOutlined,
-  HistoryOutlined, MenuOutlined, CloseOutlined
+  HistoryOutlined, MenuOutlined, CloseOutlined,
+  ApiOutlined, ToolOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '../../store'
 
@@ -90,8 +91,17 @@ export default function AdminLayout() {
       label: 'CONFIG',
       type: 'group',
       children: [
-        { key: '/admin/plugins', icon: <GiftOutlined />, label: '插件管理' },
         { key: '/admin/settings', icon: <SettingOutlined />, label: '网站设置' },
+        { key: '/admin/general-plugins', icon: <ToolOutlined />, label: '通用插件' },
+        {
+          key: 'payment-group',
+          icon: <DollarOutlined />,
+          label: '支付管理',
+          children: [
+            { key: '/admin/payment-plugins', icon: <ApiOutlined />, label: '支付插件' },
+            { key: '/admin/payment-settings', icon: <CreditCardOutlined />, label: '支付接口' },
+          ],
+        },
         { key: '/admin/logs', icon: <HistoryOutlined />, label: '操作日志' },
       ],
     },
@@ -119,6 +129,10 @@ export default function AdminLayout() {
     '/admin/orders': '商品订单',
     '/admin/coupons': '优惠券',
     '/admin/plugins': '插件管理',
+    '/admin/general-plugins': '通用插件',
+    '/admin/payment-plugins': '支付插件',
+    '/admin/payment-settings': '支付接口',
+    '/admin/store': '应用商店',
     '/admin/settings': '网站设置',
     '/admin/logs': '操作日志',
   }

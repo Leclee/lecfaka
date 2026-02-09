@@ -50,20 +50,26 @@ export interface Category {
   id: number
   name: string
   icon?: string
+  description?: string
   sort: number
   status: number
+  owner_id?: number
+  owner_name?: string
+  level_config?: string
   created_at?: string
 }
 
 export interface CategoryForm {
   name: string
   icon?: string
+  description?: string
   sort?: number
   status?: number
+  level_config?: string
 }
 
-export const getCategories = (): Promise<{ items: Category[] }> => {
-  return api.get('/admin/commodities/categories')
+export const getCategories = (params?: { status?: number; keyword?: string }): Promise<{ items: Category[] }> => {
+  return api.get('/admin/commodities/categories', { params })
 }
 
 export const createCategory = (data: CategoryForm): Promise<{ id: number }> => {
@@ -76,6 +82,10 @@ export const updateCategory = (id: number, data: Partial<CategoryForm>): Promise
 
 export const deleteCategory = (id: number): Promise<void> => {
   return api.delete(`/admin/commodities/categories/${id}`)
+}
+
+export const batchUpdateCategories = (data: { ids: number[]; action: string }): Promise<{ message: string }> => {
+  return api.post('/admin/commodities/categories/batch', data)
 }
 
 // ============== 商品管理 ==============
@@ -776,36 +786,51 @@ export const initSettings = (): Promise<{ message: string }> => {
   return api.post('/admin/settings/init')
 }
 
-// ============== 支付设置 ==============
+// ============== 支付设置（别名，兼容新页面命名） ==============
 
-export interface PaymentConfig {
-  id: number
-  name: string
-  icon?: string
-  handler: string
-  code?: string
-  config: Record<string, any>
-  cost: number
-  cost_type: number
-  commodity: number
-  recharge: number
-  equipment: number
-  sort: number
-  status: number
+export const getPaymentSettings = getPaymentConfigs
+export const createPaymentSetting = createPaymentConfig
+export const updatePaymentSetting = updatePaymentConfig
+export const deletePaymentSetting = deletePaymentConfig
+
+// ============== 插件管理扩展 ==============
+
+export const getPlugins = (type?: string): Promise<{ items: any[]; total: number }> => {
+  return api.get('/admin/plugins', { params: type ? { type } : {} })
 }
 
-export const getPaymentSettings = (): Promise<{ items: PaymentConfig[] }> => {
-  return api.get('/admin/settings/payments')
+export const enablePlugin = (pluginId: string): Promise<{ message: string }> => {
+  return api.post(`/admin/plugins/${pluginId}/enable`)
 }
 
-export const createPaymentSetting = (data: Omit<PaymentConfig, 'id'>): Promise<{ id: number }> => {
-  return api.post('/admin/settings/payments', data)
+export const disablePlugin = (pluginId: string): Promise<{ message: string }> => {
+  return api.post(`/admin/plugins/${pluginId}/disable`)
 }
 
-export const updatePaymentSetting = (id: number, data: Partial<PaymentConfig>): Promise<void> => {
-  return api.put(`/admin/settings/payments/${id}`, data)
+export const updatePluginConfig = (pluginId: string, config: Record<string, any>): Promise<{ message: string }> => {
+  return api.put(`/admin/plugins/${pluginId}/config`, config)
 }
 
-export const deletePaymentSetting = (id: number): Promise<void> => {
-  return api.delete(`/admin/settings/payments/${id}`)
+export const installPlugin = (file: File): Promise<{ message: string; plugin_id?: string }> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return api.post('/admin/plugins/install', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export const uninstallPlugin = (pluginId: string): Promise<{ message: string }> => {
+  return api.delete(`/admin/plugins/${pluginId}`)
+}
+
+export const activateLicense = (pluginId: string, licenseKey: string): Promise<{ message: string }> => {
+  return api.post(`/admin/plugins/${pluginId}/license`, { license_key: licenseKey })
+}
+
+export const getStorePlugins = (params?: { type?: string; keyword?: string; category?: string }): Promise<{ items: any[] }> => {
+  return api.get('/admin/plugins/store', { params })
+}
+
+export const installFromStore = (pluginId: string, licenseKey?: string): Promise<{ message: string }> => {
+  return api.post('/admin/plugins/store/install', null, { params: { plugin_id: pluginId, license_key: licenseKey || '' } })
 }

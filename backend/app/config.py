@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     admin_password: str = "admin123"
     admin_email: str = "admin@lecfaka.com"
     
+    # 插件商店服务器地址
+    store_url: str = "https://store.lecfaka.com"
+    
     # 站点配置（可选，留空则自动从请求头检测）
     # 仅在自动检测不可用时作为 fallback，如本地开发环境
     site_url: Optional[str] = None
