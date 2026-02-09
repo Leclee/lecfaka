@@ -4,12 +4,13 @@
 # 
 # 使用方法：
 #   1. SSH 到服务器
-#   2. 将此脚本上传或粘贴到服务器
-#   3. chmod +x deploy-main.sh && ./deploy-main.sh
+#   2. chmod +x deploy-main.sh && ./deploy-main.sh
 #
 # 前提条件：
 #   - 已安装 Docker 和 Docker Compose
 #   - 宝塔面板 Nginx 已运行在 80/443
+#
+# 管理员账号通过 Web 安装向导创建，部署完成后访问 /install
 # ============================================================
 
 set -e
@@ -21,20 +22,17 @@ echo "=========================================="
 # ---------- 配置区域（按需修改） ----------
 INSTALL_DIR="/opt/lecfaka"
 GIT_REPO="https://github.com/Leclee/lecfaka.git"
-DOMAIN="shop.leclee.top"
 DOCKER_PORT=8888               # Docker 前端端口（宝塔 Nginx 反代到此端口）
 DB_PASSWORD="$(openssl rand -hex 16)"
 SECRET_KEY="$(openssl rand -hex 32)"
 JWT_SECRET="$(openssl rand -hex 32)"
-ADMIN_USER="admin"
-ADMIN_PASS="$(openssl rand -base64 12)"
 STORE_URL="https://plugins.leclee.top"
 # ------------------------------------------
 
 echo ""
-echo "[1/5] 获取代码..."
+echo "[1/4] 获取代码..."
 if [ -d "$INSTALL_DIR" ]; then
-    echo "  目录已存在，跳过克隆（如需重新部署请先删除 $INSTALL_DIR）"
+    echo "  目录已存在，执行 git pull"
     cd "$INSTALL_DIR"
     git pull || true
 else
@@ -43,17 +41,14 @@ else
 fi
 
 echo ""
-echo "[2/5] 生成 .env 配置..."
+echo "[2/4] 生成 .env 配置..."
 cat > .env << EOF
-# LecFaka 环境变量 - 自动生成于 $(date)
+# LecFaka - 自动生成于 $(date)
 SECRET_KEY=${SECRET_KEY}
 JWT_SECRET_KEY=${JWT_SECRET}
 DB_USER=lecfaka
 DB_PASSWORD=${DB_PASSWORD}
 DB_NAME=lecfaka
-ADMIN_USERNAME=${ADMIN_USER}
-ADMIN_PASSWORD=${ADMIN_PASS}
-ADMIN_EMAIL=admin@leclee.top
 HTTP_PORT=${DOCKER_PORT}
 STORE_URL=${STORE_URL}
 EOF
@@ -61,17 +56,16 @@ EOF
 echo "  .env 已生成"
 
 echo ""
-echo "[3/5] 构建并启动 Docker 服务..."
+echo "[3/4] 构建并启动 Docker 服务..."
 docker compose --profile prod up -d --build
 
 echo ""
-echo "[4/5] 等待服务启动..."
+echo "[4/4] 等待服务启动..."
 sleep 10
 
-# 检查健康状态
 for i in {1..30}; do
     if curl -sf http://127.0.0.1:${DOCKER_PORT}/health > /dev/null 2>&1; then
-        echo "  服务已就绪 ✓"
+        echo "  服务已就绪"
         break
     fi
     echo "  等待中... ($i/30)"
@@ -79,22 +73,17 @@ for i in {1..30}; do
 done
 
 echo ""
-echo "[5/5] 部署完成！"
-echo ""
 echo "=========================================="
-echo "  部署信息"
+echo "  部署完成"
 echo "=========================================="
-echo "  站点域名:    https://${DOMAIN}"
-echo "  Docker 端口:  127.0.0.1:${DOCKER_PORT}"
-echo "  管理员账号:   ${ADMIN_USER}"
-echo "  管理员密码:   ${ADMIN_PASS}"
-echo "  数据库密码:   ${DB_PASSWORD}"
-echo "  插件商店:     ${STORE_URL}"
 echo ""
-echo "  ⚠️  请保存以上信息并立即修改管理员密码！"
-echo "  ⚠️  还需要配置宝塔 Nginx 反向代理（见下方说明）"
+echo "  Docker 端口: 127.0.0.1:${DOCKER_PORT}"
+echo "  数据库密码:  ${DB_PASSWORD}"
 echo ""
-echo "  宝塔 Nginx 配置要点："
-echo "  域名: ${DOMAIN}"
-echo "  反代地址: http://127.0.0.1:${DOCKER_PORT}"
+echo "  下一步操作："
+echo "  1. 配置宝塔 Nginx 反向代理"
+echo "     反代地址: http://127.0.0.1:${DOCKER_PORT}"
+echo "  2. 访问你的域名/install 完成安装"
+echo "     在网页上创建管理员账号"
+echo ""
 echo "=========================================="

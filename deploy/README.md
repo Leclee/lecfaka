@@ -62,18 +62,21 @@ git clone https://github.com/Leclee/lecfaka.git lecfaka
 cd lecfaka
 
 # 创建 .env
-cat > .env << 'EOF'
-SECRET_KEY=用 openssl rand -hex 32 生成
-JWT_SECRET_KEY=用 openssl rand -hex 32 生成
+SECRET=$(openssl rand -hex 32)
+JWT=$(openssl rand -hex 32)
+DBPASS=$(openssl rand -hex 16)
+
+cat > .env << EOF
+SECRET_KEY=${SECRET}
+JWT_SECRET_KEY=${JWT}
 DB_USER=lecfaka
-DB_PASSWORD=你的密码
+DB_PASSWORD=${DBPASS}
 DB_NAME=lecfaka
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=你的管理员密码
-ADMIN_EMAIL=admin@leclee.top
 HTTP_PORT=8888
 STORE_URL=https://plugins.leclee.top
 EOF
+
+echo "数据库密码: ${DBPASS}  (请保存)"
 
 # 启动
 docker compose --profile prod up -d --build
@@ -142,7 +145,7 @@ curl https://plugins.leclee.top/health
 curl https://plugins.leclee.top/api/v1/store/plugins
 ```
 
-浏览器访问 https://shop.leclee.top 即可看到前端页面。
+浏览器访问 https://shop.leclee.top/install 完成安装向导（创建管理员账号）。
 
 ---
 

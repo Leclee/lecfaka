@@ -3,6 +3,7 @@ import { Suspense, lazy } from 'react'
 import { Spin } from 'antd'
 
 // 页面懒加载
+const Install = lazy(() => import('./pages/Install'))
 const Home = lazy(() => import('./pages/Home'))
 const Product = lazy(() => import('./pages/Home/Product'))
 const Query = lazy(() => import('./pages/Order/Query'))
@@ -53,6 +54,9 @@ function App() {
   return (
     <Suspense fallback={<Loading />}>
       <Routes>
+        {/* 安装向导 */}
+        <Route path="/install" element={<Install />} />
+        
         {/* 商城前台 */}
         <Route path="/" element={<Home />} />
         <Route path="/product/:id" element={<Product />} />

@@ -20,41 +20,28 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时
     print(f"[Starting] {settings.app_name}...")
-    if settings.debug:
-        # 开发模式自动创建表
-        await init_db()
-        print("[OK] Database tables created")
     
-    # 自动创建默认管理员（如果不存在）
+    # 自动创建数据库表（生产和开发模式都执行，确保首次部署表结构存在）
+    try:
+        await init_db()
+        print("[OK] Database tables ready")
+    except Exception as e:
+        print(f"[WARN] Database init error: {e}")
+    
+    # 管理员由 Web 安装向导创建，不再从环境变量自动创建
     try:
         async with async_session_maker() as db:
             from sqlalchemy import select
             from .models.user import User
             result = await db.execute(
-                select(User).where(User.is_admin == True).limit(1)
+                select(User.id).where(User.is_admin == True).limit(1)
             )
-            if not result.scalar_one_or_none():
-                from .core.security import get_password_hash
-                password_hash, salt = get_password_hash(settings.admin_password)
-                admin = User(
-                    username=settings.admin_username,
-                    email=settings.admin_email,
-                    password_hash=password_hash,
-                    salt=salt,
-                    is_admin=True,
-                    status=1,
-                    balance=0,
-                    coin=0,
-                    total_recharge=0,
-                    business_level=0,
-                )
-                db.add(admin)
-                await db.commit()
-                print(f"[OK] Default admin created: {settings.admin_username}")
+            if result.scalar_one_or_none():
+                print("[OK] System installed")
             else:
-                print("[OK] Admin user exists")
+                print("[OK] Awaiting installation via /install")
     except Exception as e:
-        print(f"[WARN] Admin init error: {e}")
+        print(f"[WARN] Install check error: {e}")
     
     # 加载插件系统
     try:

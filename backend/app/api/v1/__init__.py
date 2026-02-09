@@ -11,8 +11,12 @@ from .users import router as users_router
 from .payments import router as payments_router
 from .admin import router as admin_router
 from .uploads import router as uploads_router
+from .install import router as install_router
 
 api_router = APIRouter()
+
+# 安装向导
+api_router.include_router(install_router, prefix="/install", tags=["安装"])
 
 # 认证
 api_router.include_router(auth_router, prefix="/auth", tags=["认证"])

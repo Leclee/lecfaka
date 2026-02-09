@@ -74,9 +74,6 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-this-jwt-key}
-      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@lecfaka.com}
       - STORE_URL=${STORE_URL:-https://store.lecfaka.com}
       - APP_ENV=production
       - DEBUG=false
