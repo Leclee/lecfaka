@@ -2,29 +2,147 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 全局样式 */
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* ============================================
+   主题 CSS Variables — 默认值（无主题插件时生效）
+   当主题插件激活后，ThemeProvider 会通过 JS 覆盖这些变量
+   ============================================ */
+:root {
+  /* 颜色 */
+  --theme-primary: #1677ff;
+  --theme-primary-hover: #4096ff;
+  --theme-secondary: #722ed1;
+  --theme-accent: #f5222d;
+  --theme-bg: #ffffff;
+  --theme-surface: #fafafa;
+  --theme-surface-hover: #f5f5f5;
+  --theme-text: #000000d9;
+  --theme-text-secondary: #00000073;
+  --theme-text-muted: #00000040;
+  --theme-border: #d9d9d9;
+  --theme-divider: #f0f0f0;
+  --theme-success: #52c41a;
+  --theme-warning: #faad14;
+  --theme-error: #f5222d;
+  --theme-info: #1677ff;
+  --theme-gradient-start: #1677ff;
+  --theme-gradient-end: #722ed1;
+
+  /* 字体 */
+  --theme-font-heading: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --theme-font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --theme-font-mono: 'SFMono-Regular', Consolas, monospace;
+  --theme-font-size-base: 14px;
+  --theme-font-weight-heading: 600;
+
+  /* 布局 */
+  --theme-radius: 8px;
+  --theme-radius-lg: 12px;
+  --theme-radius-sm: 4px;
+  --theme-header-height: 64px;
+  --theme-content-max-width: 1280px;
+
+  /* 特效 */
+  --theme-shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --theme-shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+  --theme-shadow-lg: 0 10px 15px rgba(0,0,0,0.1);
+  --theme-shadow-xl: 0 20px 25px rgba(0,0,0,0.15);
+  --theme-backdrop-blur: blur(12px);
+  --theme-transition: all 200ms ease;
+  --theme-glass-bg: rgba(255,255,255,0.8);
+  --theme-glass-border: rgba(255,255,255,0.3);
 }
 
-/* 滚动条样式 */
+/* ============================================
+   全局基础样式
+   ============================================ */
+body {
+  margin: 0;
+  font-family: var(--theme-font-body);
+  font-size: var(--theme-font-size-base);
+  color: var(--theme-text);
+  background-color: var(--theme-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 300ms ease, color 300ms ease;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--theme-font-heading);
+  font-weight: var(--theme-font-weight-heading);
+}
+
+/* ============================================
+   滚动条样式（跟随主题）
+   ============================================ */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: var(--theme-surface);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 4px;
+  background: var(--theme-border);
+  border-radius: var(--theme-radius-sm);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: var(--theme-text-muted);
+}
+
+/* ============================================
+   主题工具类
+   ============================================ */
+
+/* 毛玻璃面板 */
+.theme-glass {
+  background: var(--theme-glass-bg);
+  backdrop-filter: var(--theme-backdrop-blur);
+  -webkit-backdrop-filter: var(--theme-backdrop-blur);
+  border: 1px solid var(--theme-glass-border);
+}
+
+/* 主题卡片 */
+.theme-card {
+  background: var(--theme-surface);
+  border-radius: var(--theme-radius-lg);
+  box-shadow: var(--theme-shadow-md);
+  transition: var(--theme-transition);
+}
+
+.theme-card:hover {
+  box-shadow: var(--theme-shadow-lg);
+  transform: translateY(-2px);
+}
+
+/* 渐变文字 */
+.theme-gradient-text {
+  background: linear-gradient(135deg, var(--theme-gradient-start), var(--theme-gradient-end));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 渐变按钮 */
+.theme-gradient-btn {
+  background: linear-gradient(135deg, var(--theme-gradient-start), var(--theme-gradient-end));
+  color: white;
+  border: none;
+  border-radius: var(--theme-radius);
+  padding: 8px 20px;
+  cursor: pointer;
+  transition: var(--theme-transition);
+}
+
+.theme-gradient-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: var(--theme-shadow-md);
+}
+
+/* 主题分割线 */
+.theme-divider {
+  border-color: var(--theme-divider);
 }

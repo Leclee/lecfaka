@@ -114,3 +114,28 @@ export const getCommodityCards = (id: number, params: {
 export const getPayments = (): Promise<PaymentMethod[]> => {
   return api.get('/shop/payments')
 }
+
+// ============== 主题相关 ==============
+
+/** 主题配置响应类型 */
+export interface ThemeResponse {
+  theme: ThemeData | null
+}
+
+/** 主题配置数据 */
+export interface ThemeData {
+  name: string
+  mode: string  // 'light' | 'dark' | 'auto'
+  css_variables: Record<string, string>
+  css_variables_dark: Record<string, string> | null
+  antd_token: Record<string, any>
+  antd_token_dark: Record<string, any> | null
+  font_import_url: string | null
+  supports_dark_mode: boolean
+}
+
+/** 获取当前激活主题配置 */
+export const getTheme = (): Promise<ThemeResponse> => {
+  return api.get('/shop/theme')
+}
+

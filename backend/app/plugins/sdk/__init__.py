@@ -8,6 +8,7 @@ from .hooks import hooks, Events, EventContext, HookManager
 from .payment_base import PaymentPluginBase, PaymentResult, CallbackResult, PaymentType
 from .notify_base import NotifyPluginBase
 from .delivery_base import DeliveryPluginBase
+from .theme_base import ThemePluginBase, ThemeConfig
 
 __all__ = [
     "PluginBase",
@@ -22,4 +23,6 @@ __all__ = [
     "PaymentType",
     "NotifyPluginBase",
     "DeliveryPluginBase",
+    "ThemePluginBase",
+    "ThemeConfig",
 ]

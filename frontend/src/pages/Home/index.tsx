@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { 
-  Card, Row, Col, Spin, Empty, Input, Tag, Layout, Typography, 
-  Avatar, Dropdown, Alert, Tabs 
+import {
+  Card, Row, Col, Spin, Empty, Input, Tag, Layout, Typography,
+  Avatar, Dropdown, Tabs
 } from 'antd'
-import { 
-  ShoppingCartOutlined, SearchOutlined, UserOutlined, 
+import {
+  ShoppingCartOutlined, SearchOutlined, UserOutlined,
   BellOutlined, LogoutOutlined, SettingOutlined,
   FireOutlined, ThunderboltOutlined
 } from '@ant-design/icons'
 import { getCategories, getCommodities, Category, Commodity } from '../../api/shop'
-import { useAuthStore } from '../../store'
+import { useAuthStore, useThemeStore } from '../../store'
+import DarkModeToggle from '../../components/DarkModeToggle'
 
 const { Header, Content, Footer } = Layout
 const { Text, Paragraph } = Typography
@@ -24,6 +25,7 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [keywords, setKeywords] = useState('')
   const { user, token, logout } = useAuthStore()
+  useThemeStore()  // 确保主题已加载
 
   useEffect(() => {
     loadData()
@@ -75,8 +77,8 @@ export default function Home() {
   // 分类标签数据
   const categoryTabs = [
     { key: 'all', label: '全部商品' },
-    ...categories.map(cat => ({ 
-      key: String(cat.id), 
+    ...categories.map(cat => ({
+      key: String(cat.id),
       label: (
         <span className="flex items-center gap-1">
           {cat.icon && <img src={cat.icon} alt="" className="w-4 h-4" />}
@@ -86,21 +88,36 @@ export default function Home() {
     }))
   ]
 
+
   return (
-    <Layout className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+    <Layout className="min-h-screen" style={{ background: 'var(--theme-bg)' }}>
       {/* 顶部导航栏 */}
-      <Header className="bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-50 px-4 md:px-8 flex items-center justify-between h-16">
+      <Header
+        className="theme-glass sticky top-0 z-50 px-4 md:px-8 flex items-center justify-between"
+        style={{
+          height: 'var(--theme-header-height)',
+          lineHeight: 'var(--theme-header-height)',
+          boxShadow: 'var(--theme-shadow-sm)',
+        }}
+      >
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: `linear-gradient(135deg, var(--theme-gradient-start), var(--theme-gradient-end))` }}
+          >
             <ShoppingCartOutlined className="text-white text-xl" />
           </div>
-          <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 hidden sm:block">
+          <span className="text-lg font-bold theme-gradient-text hidden sm:block">
             LecFaka
           </span>
         </div>
 
         <div className="flex items-center gap-2 md:gap-4">
-          <Link to="/query" className="hidden sm:flex items-center gap-1 text-gray-600 hover:text-blue-500 transition-colors">
+          <Link
+            to="/query"
+            className="hidden sm:flex items-center gap-1 transition-colors"
+            style={{ color: 'var(--theme-text-secondary)' }}
+          >
             <SearchOutlined />
             <span>订单查询</span>
           </Link>
@@ -112,31 +129,38 @@ export default function Home() {
             onSearch={(value) => setKeywords(value)}
           />
 
+          {/* 暗色模式切换 */}
+          <DarkModeToggle />
+
           {token && user ? (
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
-              <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 rounded-lg px-3 py-1.5 transition-colors">
-                <Avatar 
-                  src={user.avatar} 
+              <div
+                className="flex items-center gap-2 cursor-pointer rounded-lg px-3 py-1.5 transition-colors"
+                style={{ ':hover': { background: 'var(--theme-surface-hover)' } } as any}
+              >
+                <Avatar
+                  src={user.avatar}
                   icon={<UserOutlined />}
-                  className="bg-gradient-to-br from-blue-500 to-purple-600"
+                  style={{ background: `linear-gradient(135deg, var(--theme-gradient-start), var(--theme-gradient-end))` }}
                 />
                 <div className="hidden md:block">
-                  <div className="text-sm font-medium text-gray-700">{user.username}</div>
-                  <div className="text-xs text-orange-500">余额: ¥{user.balance.toFixed(2)}</div>
+                  <div className="text-sm font-medium" style={{ color: 'var(--theme-text)' }}>{user.username}</div>
+                  <div className="text-xs" style={{ color: 'var(--theme-accent)' }}>余额: ¥{user.balance.toFixed(2)}</div>
                 </div>
               </div>
             </Dropdown>
           ) : (
             <div className="flex gap-2">
-              <Link 
-                to="/login" 
-                className="px-4 py-1.5 text-blue-600 hover:text-blue-700 font-medium transition-colors"
+              <Link
+                to="/login"
+                className="px-4 py-1.5 font-medium transition-colors"
+                style={{ color: 'var(--theme-primary)' }}
               >
                 登录
               </Link>
-              <Link 
-                to="/register" 
-                className="px-4 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:shadow-lg transition-all"
+              <Link
+                to="/register"
+                className="px-4 py-1.5 text-white rounded-lg hover:shadow-lg transition-all theme-gradient-btn"
               >
                 注册
               </Link>
@@ -145,30 +169,29 @@ export default function Home() {
         </div>
       </Header>
 
-      <Content className="px-4 md:px-8 py-6 max-w-7xl mx-auto w-full">
+      <Content className="px-4 md:px-8 py-6 mx-auto w-full" style={{ maxWidth: 'var(--theme-content-max-width)' }}>
         {/* 公告栏 */}
-        <Alert
-          message={
-            <div className="flex items-center gap-2">
-              <BellOutlined className="text-blue-500" />
-              <Text strong>公告</Text>
-            </div>
-          }
-          description={
-            <Paragraph className="!mb-0 text-gray-600">
-              欢迎使用 LecFaka 自动发卡系统！如有问题请联系客服。
-            </Paragraph>
-          }
-          type="info"
-          showIcon={false}
-          className="mb-6 rounded-xl border-0 bg-white/60 backdrop-blur-sm shadow-sm"
-        />
+        <div
+          className="theme-glass mb-6 p-4"
+          style={{ borderRadius: 'var(--theme-radius-lg)' }}
+        >
+          <div className="flex items-center gap-2">
+            <BellOutlined style={{ color: 'var(--theme-accent)' }} />
+            <Text strong style={{ color: 'var(--theme-text)' }}>公告</Text>
+          </div>
+          <Paragraph className="!mb-0 mt-2" style={{ color: 'var(--theme-text-secondary)' }}>
+            欢迎使用 LecFaka 自动发卡系统！如有问题请联系客服。
+          </Paragraph>
+        </div>
 
         {/* 分类标签 */}
-        <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 mb-6 shadow-sm">
+        <div
+          className="theme-glass mb-6 p-4"
+          style={{ borderRadius: 'var(--theme-radius-lg)' }}
+        >
           <div className="flex items-center gap-2 mb-3">
-            <ShoppingCartOutlined className="text-blue-500" />
-            <Text strong>购买</Text>
+            <ShoppingCartOutlined style={{ color: 'var(--theme-accent)' }} />
+            <Text strong style={{ color: 'var(--theme-text)' }}>购买</Text>
           </div>
           <Tabs
             activeKey={selectedCategory}
@@ -179,7 +202,10 @@ export default function Home() {
         </div>
 
         {/* 商品列表 */}
-        <div className="bg-white/40 backdrop-blur-sm rounded-xl p-4 md:p-6 shadow-sm min-h-[400px]">
+        <div
+          className="theme-glass p-4 md:p-6 min-h-[400px]"
+          style={{ borderRadius: 'var(--theme-radius-lg)' }}
+        >
           {loading ? (
             <div className="flex justify-center items-center py-20">
               <Spin size="large" />
@@ -193,10 +219,14 @@ export default function Home() {
                   <Link to={`/product/${item.id}`}>
                     <Card
                       hoverable
-                      className="overflow-hidden rounded-xl border-0 shadow-sm hover:shadow-xl transition-all duration-300 h-full"
+                      className="overflow-hidden border-0 h-full theme-card"
+                      style={{ borderRadius: 'var(--theme-radius-lg)' }}
                       bodyStyle={{ padding: 12 }}
                       cover={
-                        <div className="h-32 sm:h-40 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center overflow-hidden relative">
+                        <div
+                          className="h-32 sm:h-40 flex items-center justify-center overflow-hidden relative"
+                          style={{ background: `linear-gradient(135deg, var(--theme-surface), var(--theme-surface-hover))` }}
+                        >
                           {item.cover ? (
                             <img
                               alt={item.name}
@@ -204,7 +234,7 @@ export default function Home() {
                               className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
                             />
                           ) : (
-                            <ShoppingCartOutlined className="text-4xl text-gray-300" />
+                            <ShoppingCartOutlined className="text-4xl" style={{ color: 'var(--theme-text-muted)' }} />
                           )}
                         </div>
                       }
@@ -224,25 +254,29 @@ export default function Home() {
                       </div>
 
                       {/* 商品名称 */}
-                      <div className="font-medium text-gray-800 truncate text-sm mb-2" title={item.name}>
+                      <div
+                        className="font-medium truncate text-sm mb-2"
+                        title={item.name}
+                        style={{ color: 'var(--theme-text)' }}
+                      >
                         {item.name}
                       </div>
 
                       {/* 价格和库存 */}
                       <div className="flex items-end justify-between">
                         <div>
-                          <span className="text-red-500 text-lg font-bold">
+                          <span className="text-lg font-bold" style={{ color: 'var(--theme-accent)' }}>
                             ¥{(user ? item.user_price : item.price).toFixed(2)}
                           </span>
                         </div>
-                        <div className="text-xs text-gray-400">
+                        <div className="text-xs" style={{ color: 'var(--theme-text-muted)' }}>
                           <span>库存: {item.stock > 100 ? '充足' : item.stock > 0 ? item.stock : '即将售罄'}</span>
                         </div>
                       </div>
 
                       {/* 销量 */}
                       {item.sold_count > 0 && (
-                        <div className="text-xs text-gray-400 mt-1">
+                        <div className="text-xs mt-1" style={{ color: 'var(--theme-text-muted)' }}>
                           已售: {item.sold_count}
                         </div>
                       )}
@@ -256,8 +290,8 @@ export default function Home() {
       </Content>
 
       {/* 页脚 */}
-      <Footer className="text-center bg-transparent py-6">
-        <Text type="secondary" className="text-sm">
+      <Footer className="text-center py-6" style={{ background: 'transparent' }}>
+        <Text style={{ color: 'var(--theme-text-muted)', fontSize: '0.875rem' }}>
           © 2024 LecFaka - 基于 FastAPI + React 构建的现代化发卡系统
         </Text>
       </Footer>

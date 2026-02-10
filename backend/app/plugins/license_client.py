@@ -15,7 +15,7 @@ logger = logging.getLogger("plugins.store_client")
 # 主程序版本号（用于更新检查）
 APP_VERSION = "1.0.0"
 
-STORE_URL = getattr(settings, "store_url", None) or "https://store.lecfaka.com"
+STORE_URL = getattr(settings, "store_url", None) or "https://plugins.leclee.top"
 
 
 async def verify_license(plugin_id: str, license_key: str, domain: str) -> Dict[str, Any]:

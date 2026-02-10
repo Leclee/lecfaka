@@ -2,6 +2,7 @@ import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { Spin } from 'antd'
 import api from './api'
+import ThemeProvider from './components/ThemeProvider'
 
 // 页面懒加载
 const Install = lazy(() => import('./pages/Install'))
@@ -79,54 +80,56 @@ function App() {
   }
 
   return (
-    <Suspense fallback={<Loading />}>
-      <Routes>
-        {/* 安装向导 */}
-        <Route path="/install" element={<Install />} />
-        
-        {/* 商城前台 */}
-        <Route path="/" element={<Home />} />
-        <Route path="/product/:id" element={<Product />} />
-        <Route path="/query" element={<Query />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        
-        {/* 用户中心 */}
-        <Route path="/user" element={<UserLayout />}>
-          <Route index element={<UserDashboard />} />
-          <Route path="shop" element={<UserShop />} />
-          <Route path="recharge" element={<UserRecharge />} />
-          <Route path="orders" element={<UserOrders />} />
-          <Route path="coins" element={<UserCoins />} />
-          <Route path="referrals" element={<UserReferrals />} />
-          <Route path="bills" element={<UserBills />} />
-          <Route path="security" element={<UserSecurity />} />
-        </Route>
-        
-        {/* 管理后台 */}
-        <Route path="/admin" element={<AdminLayout />}>
-          <Route index element={<AdminDashboard />} />
-          <Route path="users" element={<AdminUsers />} />
-          <Route path="recharge" element={<AdminRechargeOrders />} />
-          <Route path="withdrawals" element={<AdminWithdrawals />} />
-          <Route path="user-groups" element={<AdminUserGroups />} />
-          <Route path="business-levels" element={<AdminBusinessLevels />} />
-          <Route path="categories" element={<AdminCategories />} />
-          <Route path="commodities" element={<AdminCommodities />} />
-          <Route path="cards" element={<AdminCards />} />
-          <Route path="coupons" element={<AdminCoupons />} />
-          <Route path="orders" element={<AdminOrders />} />
-          <Route path="bills" element={<AdminBills />} />
-          <Route path="logs" element={<AdminLogs />} />
-          <Route path="plugins" element={<AdminPlugins />} />
-          <Route path="store" element={<AdminStore />} />
-          <Route path="payment-plugins" element={<AdminPaymentPlugins />} />
-          <Route path="payment-settings" element={<AdminPaymentSettings />} />
-          <Route path="general-plugins" element={<AdminGeneralPlugins />} />
-          <Route path="settings" element={<AdminSettings />} />
-        </Route>
-      </Routes>
-    </Suspense>
+    <ThemeProvider>
+      <Suspense fallback={<Loading />}>
+        <Routes>
+          {/* 安装向导 */}
+          <Route path="/install" element={<Install />} />
+
+          {/* 商城前台 */}
+          <Route path="/" element={<Home />} />
+          <Route path="/product/:id" element={<Product />} />
+          <Route path="/query" element={<Query />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+
+          {/* 用户中心 */}
+          <Route path="/user" element={<UserLayout />}>
+            <Route index element={<UserDashboard />} />
+            <Route path="shop" element={<UserShop />} />
+            <Route path="recharge" element={<UserRecharge />} />
+            <Route path="orders" element={<UserOrders />} />
+            <Route path="coins" element={<UserCoins />} />
+            <Route path="referrals" element={<UserReferrals />} />
+            <Route path="bills" element={<UserBills />} />
+            <Route path="security" element={<UserSecurity />} />
+          </Route>
+
+          {/* 管理后台 */}
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<AdminDashboard />} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="recharge" element={<AdminRechargeOrders />} />
+            <Route path="withdrawals" element={<AdminWithdrawals />} />
+            <Route path="user-groups" element={<AdminUserGroups />} />
+            <Route path="business-levels" element={<AdminBusinessLevels />} />
+            <Route path="categories" element={<AdminCategories />} />
+            <Route path="commodities" element={<AdminCommodities />} />
+            <Route path="cards" element={<AdminCards />} />
+            <Route path="coupons" element={<AdminCoupons />} />
+            <Route path="orders" element={<AdminOrders />} />
+            <Route path="bills" element={<AdminBills />} />
+            <Route path="logs" element={<AdminLogs />} />
+            <Route path="plugins" element={<AdminPlugins />} />
+            <Route path="store" element={<AdminStore />} />
+            <Route path="payment-plugins" element={<AdminPaymentPlugins />} />
+            <Route path="payment-settings" element={<AdminPaymentSettings />} />
+            <Route path="general-plugins" element={<AdminGeneralPlugins />} />
+            <Route path="settings" element={<AdminSettings />} />
+          </Route>
+        </Routes>
+      </Suspense>
+    </ThemeProvider>
   )
 }
 

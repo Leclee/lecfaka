@@ -18,6 +18,7 @@ from .sdk.hooks import hooks
 from .sdk.payment_base import PaymentPluginBase
 from .sdk.notify_base import NotifyPluginBase
 from .sdk.delivery_base import DeliveryPluginBase
+from .sdk.theme_base import ThemePluginBase
 
 logger = logging.getLogger("plugins.manager")
 
@@ -29,6 +30,9 @@ NOTIFY_HANDLERS: Dict[str, PluginBase] = {}
 
 # 发货处理器注册表
 DELIVERY_HANDLERS: Dict[str, PluginBase] = {}
+
+# 主题处理器注册表（同时只活跃一个主题）
+THEME_HANDLERS: Dict[str, ThemePluginBase] = {}
 
 
 class PluginInstance:
@@ -247,6 +251,9 @@ class PluginManager:
         elif pi.meta.type == "delivery" and isinstance(instance, DeliveryPluginBase):
             DELIVERY_HANDLERS[pi.meta.id] = instance
             logger.info(f"  Registered delivery handler: {pi.meta.id}")
+        elif pi.meta.type == "theme" and isinstance(instance, ThemePluginBase):
+            THEME_HANDLERS[pi.meta.id] = instance
+            logger.info(f"  Registered theme handler: {pi.meta.id}")
 
     async def enable_plugin(self, plugin_id: str, db: AsyncSession) -> bool:
         """启用插件（API 调用）"""
@@ -257,6 +264,13 @@ class PluginManager:
         # 授权检查
         if pi.meta.license_required and pi.license_status != 1:
             raise ValueError("Plugin requires a valid license")
+
+        # 主题互斥：启用新主题前禁用其他已激活的主题
+        if pi.meta.type == "theme":
+            for tid, tpi in list(self._plugins.items()):
+                if tpi.meta.type == "theme" and tpi.enabled and tid != plugin_id:
+                    logger.info(f"Deactivating theme {tid} (mutual exclusion)")
+                    await self.disable_plugin(tid, db)
 
         await self._enable_plugin_internal(pi)
 
@@ -289,6 +303,8 @@ class PluginManager:
             NOTIFY_HANDLERS.pop(plugin_id, None)
         elif pi.meta.type == "delivery":
             DELIVERY_HANDLERS.pop(plugin_id, None)
+        elif pi.meta.type == "theme":
+            THEME_HANDLERS.pop(plugin_id, None)
 
         await pi.instance.on_disable()
         pi.enabled = False
@@ -329,6 +345,8 @@ class PluginManager:
                 NOTIFY_HANDLERS.pop(plugin_id, None)
             elif pi.meta.type == "delivery":
                 DELIVERY_HANDLERS.pop(plugin_id, None)
+            elif pi.meta.type == "theme":
+                THEME_HANDLERS.pop(plugin_id, None)
             await self._enable_plugin_internal(pi)
             logger.info(f"Plugin {plugin_id} re-initialized with new config")
 
@@ -362,6 +380,15 @@ class PluginManager:
     def get_payment_handler(self, handler_id: str):
         """获取支付处理器类（兼容旧接口）"""
         return PAYMENT_HANDLERS.get(handler_id)
+
+    def get_active_theme(self) -> Optional["ThemePluginBase"]:
+        """
+        获取当前激活的主题插件实例。
+        如果没有激活的主题，返回 None（前端使用默认主题）。
+        """
+        for handler in THEME_HANDLERS.values():
+            return handler  ## 只取第一个（互斥机制保证最多一个）
+        return None
 
     async def verify_all_licenses(self):
         """

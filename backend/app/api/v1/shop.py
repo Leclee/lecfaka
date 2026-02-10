@@ -592,3 +592,21 @@ async def get_order(
     }
     
     return response
+
+
+# ============== 主题相关 ==============
+
+@router.get("/theme", summary="获取当前激活主题配置")
+async def get_active_theme():
+    """
+    获取当前激活的主题配置（公开接口，无需登录）。
+    前端启动时调用此接口加载主题。如果没有激活的主题插件，返回 null（前端使用默认样式）。
+    """
+    from ...plugins import plugin_manager
+
+    theme_instance = plugin_manager.get_active_theme()
+    if not theme_instance or not theme_instance.theme_config:
+        return {"theme": None}
+
+    return {"theme": theme_instance.theme_config.to_dict()}
+
