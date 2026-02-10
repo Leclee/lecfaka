@@ -484,7 +484,7 @@ export default function UserCenter() {
     <Layout className="min-h-screen">
       <Sider width={220} className="bg-white border-r border-gray-100">
         <div className="p-4 text-center border-b border-gray-100">
-          <Link to="/" className="text-lg font-bold text-blue-500">LecFaka</Link>
+          <Link to="/" className="text-lg font-bold text-blue-500 no-underline hover:no-underline">LecFaka</Link>
         </div>
         <Menu
           mode="inline"

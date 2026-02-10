@@ -5,6 +5,7 @@ import {
   HomeOutlined, ShopOutlined, WalletOutlined, ShoppingCartOutlined,
   GiftOutlined, TeamOutlined, FileTextOutlined, SafetyOutlined,
   UserOutlined, LogoutOutlined, OrderedListOutlined, MenuOutlined,
+  SettingOutlined,
   CloseOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '../../store/auth'
@@ -51,9 +52,10 @@ export default function UserLayout() {
     navigate('/login')
   }
 
-  const userMenuItems = [
+  const userMenuItems: any[] = [
     { key: 'center', label: '个人中心', icon: <UserOutlined />, onClick: () => navigate('/user') },
     { key: 'orders', label: '我的订单', icon: <ShoppingCartOutlined />, onClick: () => navigate('/user/orders') },
+    user?.is_admin ? { key: 'admin', label: '管理后台', icon: <SettingOutlined />, onClick: () => navigate('/admin') } : null,
     { type: 'divider' as const },
     { key: 'logout', label: '退出登录', icon: <LogoutOutlined />, onClick: handleLogout, danger: true },
   ].filter(Boolean)

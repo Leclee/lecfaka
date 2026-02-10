@@ -103,7 +103,7 @@ export default function PaymentPlugins() {
       width: 180,
       render: (_: any, r: any) => {
         const channels = r.channels || {}
-        const channelColors: Record<string, string> = { alipay: 'blue', wxpay: 'green', qqpay: 'purple' }
+        const channelColors: Record<string, string> = { alipay: 'blue', wxpay: 'green', qqpay: 'purple', usdt: 'orange' }
         return (
           <Space size={4} wrap>
             {Object.entries(channels).map(([k, v]) => (

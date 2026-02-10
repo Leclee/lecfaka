@@ -107,12 +107,13 @@ export default function AdminLayout() {
     },
   ]
 
-  const userMenuItems = [
+  const userMenuItems: any[] = [
     { key: 'profile', label: '个人中心', icon: <UserOutlined />, onClick: () => navigate('/user') },
+    user?.is_admin ? { key: 'admin', label: '管理后台', icon: <SettingOutlined />, onClick: () => navigate('/admin') } : null,
     { key: 'home', label: '返回前台', icon: <ShoppingOutlined />, onClick: () => navigate('/') },
     { type: 'divider' as const },
     { key: 'logout', label: '退出登录', icon: <LogoutOutlined />, onClick: handleLogout, danger: true },
-  ]
+  ].filter(Boolean)
 
   // 面包屑映射
   const breadcrumbMap: Record<string, string> = {

@@ -23,6 +23,7 @@ class EpayPaymentPlugin(PaymentPluginBase):
         "alipay": "支付宝",
         "wxpay": "微信支付",
         "qqpay": "QQ钱包",
+        "usdt": "USDT",
     }
 
     def __init__(self, meta: PluginMeta, config: Dict[str, Any]):

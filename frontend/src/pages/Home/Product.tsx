@@ -20,10 +20,11 @@ const { Title, Paragraph, Text } = Typography
 // 支付方式图标映射
 const PaymentIcon = ({ handler, code }: { handler: string; code?: string }) => {
   if (handler === '#balance') return <WalletOutlined className="text-lg" />
-  const key = code || handler || ''
+  const key = (code || handler || '').toLowerCase()
   if (key.includes('wxpay') || key.includes('wechat')) return <WechatOutlined className="text-lg text-green-500" />
   if (key.includes('alipay')) return <AlipayCircleOutlined className="text-lg text-blue-500" />
   if (key.includes('qqpay')) return <WalletOutlined className="text-lg text-blue-400" />
+  if (key.includes('usdt')) return <WalletOutlined className="text-lg text-orange-500" />
   return <WalletOutlined className="text-lg" />
 }
 
@@ -373,7 +374,7 @@ export default function Product() {
       {/* 顶部导航 */}
       <header className="bg-white shadow-sm px-6 h-16 flex items-center">
         <div className="max-w-6xl mx-auto w-full flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3">
+          <Link to="/" className="flex items-center gap-3 no-underline hover:no-underline">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
               <ShoppingCartOutlined className="text-white text-xl" />
             </div>

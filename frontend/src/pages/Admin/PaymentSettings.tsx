@@ -115,7 +115,7 @@ export default function PaymentSettings() {
   ]
 
   const channelTagColor: Record<string, string> = {
-    alipay: 'blue', wxpay: 'green', qqpay: 'purple', 'TRC20-USDT': 'orange',
+    alipay: 'blue', wxpay: 'green', qqpay: 'purple', usdt: 'orange', USDT: 'orange', 'TRC20-USDT': 'orange',
   }
 
   const columns = [
@@ -228,7 +228,7 @@ export default function PaymentSettings() {
             </Select>
           </Form.Item>
           <Form.Item name="code" label="支付通道">
-            <Input placeholder="如: alipay / wxpay / qqpay" />
+            <Input placeholder="如: alipay / wxpay / qqpay / usdt" />
           </Form.Item>
           <Form.Item name="icon" label="图标URL">
             <Input placeholder="支付方式图标" />
