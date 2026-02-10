@@ -55,12 +55,28 @@ class CreateCommodityRequest(BaseModel):
     user_price: float = Field(..., gt=0)
     factory_price: float = 0
     delivery_way: int = 0
+    delivery_auto_mode: int = 0
+    delivery_message: Optional[str] = None
     contact_type: int = 0
+    send_email: int = 0
     password_status: int = 0
     draft_status: int = 0
+    draft_premium: float = 0
+    purchase_count: int = 0
     minimum: int = 0
     maximum: int = 0
     only_user: int = 0
+    coupon: int = 1
+    api_status: int = 0
+    recommend: int = 0
+    hide: int = 0
+    inventory_hidden: int = 0
+    seckill_status: int = 0
+    level_disable: int = 0
+    level_price: Optional[str] = None
+    wholesale_config: Optional[str] = None
+    widget: Optional[str] = None
+    leave_message: Optional[str] = None
     sort: int = 0
     status: int = 1
 
@@ -75,12 +91,28 @@ class UpdateCommodityRequest(BaseModel):
     user_price: Optional[float] = Field(None, gt=0)
     factory_price: Optional[float] = None
     delivery_way: Optional[int] = None
+    delivery_auto_mode: Optional[int] = None
+    delivery_message: Optional[str] = None
     contact_type: Optional[int] = None
+    send_email: Optional[int] = None
     password_status: Optional[int] = None
     draft_status: Optional[int] = None
+    draft_premium: Optional[float] = None
+    purchase_count: Optional[int] = None
     minimum: Optional[int] = None
     maximum: Optional[int] = None
     only_user: Optional[int] = None
+    coupon: Optional[int] = None
+    api_status: Optional[int] = None
+    recommend: Optional[int] = None
+    hide: Optional[int] = None
+    inventory_hidden: Optional[int] = None
+    seckill_status: Optional[int] = None
+    level_disable: Optional[int] = None
+    level_price: Optional[str] = None
+    wholesale_config: Optional[str] = None
+    widget: Optional[str] = None
+    leave_message: Optional[str] = None
     sort: Optional[int] = None
     status: Optional[int] = None
 
@@ -356,12 +388,23 @@ async def get_commodity(
         "delivery_auto_mode": commodity.delivery_auto_mode,
         "delivery_message": commodity.delivery_message,
         "contact_type": commodity.contact_type,
+        "send_email": commodity.send_email,
         "password_status": commodity.password_status,
         "draft_status": commodity.draft_status,
         "draft_premium": float(commodity.draft_premium),
+        "purchase_count": commodity.purchase_count,
         "minimum": commodity.minimum,
         "maximum": commodity.maximum,
         "only_user": commodity.only_user,
+        "coupon": commodity.coupon,
+        "api_status": commodity.api_status,
+        "recommend": commodity.recommend,
+        "hide": commodity.hide,
+        "inventory_hidden": commodity.inventory_hidden,
+        "seckill_status": commodity.seckill_status,
+        "level_disable": commodity.level_disable,
+        "level_price": commodity.level_price,
+        "wholesale_config": commodity.wholesale_config,
         "widget": commodity.widget,
         "leave_message": commodity.leave_message,
         "sort": commodity.sort,
@@ -393,12 +436,28 @@ async def create_commodity(
         user_price=request.user_price,
         factory_price=request.factory_price,
         delivery_way=request.delivery_way,
+        delivery_auto_mode=request.delivery_auto_mode,
+        delivery_message=request.delivery_message,
         contact_type=request.contact_type,
+        send_email=request.send_email,
         password_status=request.password_status,
         draft_status=request.draft_status,
+        draft_premium=request.draft_premium,
+        purchase_count=request.purchase_count,
         minimum=request.minimum,
         maximum=request.maximum,
         only_user=request.only_user,
+        coupon=request.coupon,
+        api_status=request.api_status,
+        recommend=request.recommend,
+        hide=request.hide,
+        inventory_hidden=request.inventory_hidden,
+        seckill_status=request.seckill_status,
+        level_disable=request.level_disable,
+        level_price=request.level_price,
+        wholesale_config=request.wholesale_config,
+        widget=request.widget,
+        leave_message=request.leave_message,
         sort=request.sort,
         status=request.status,
         owner_id=None,

@@ -5,6 +5,7 @@
 import json
 import logging
 from datetime import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
@@ -16,6 +17,8 @@ from ...models.card import Card
 from ...models.commodity import Commodity
 from ...models.user import User
 from ...models.payment import PaymentMethod
+from ...models.recharge import RechargeOrder
+from ...models.bill import Bill
 from ...payments import get_payment_handler as legacy_get_handler
 from ...plugins import plugin_manager, PAYMENT_HANDLERS
 from ...plugins.sdk.payment_base import PaymentPluginBase
@@ -85,14 +88,78 @@ async def _handle_callback(handler: str, request: Request, db):
         logger.warning(f"Callback verify failed [{handler}]: {callback_result.error_msg}")
         return payment_instance.get_callback_response(False)
     
-    # 4. 查找订单
+    # 4. 查找商品订单或充值订单
     result = await db.execute(
         select(Order).where(Order.trade_no == callback_result.trade_no)
     )
     order = result.scalar_one_or_none()
-    if not order:
+
+    recharge_result = await db.execute(
+        select(RechargeOrder).where(RechargeOrder.trade_no == callback_result.trade_no)
+    )
+    recharge_order = recharge_result.scalar_one_or_none()
+
+    if not order and not recharge_order:
         logger.warning(f"Order not found: {callback_result.trade_no}")
         return payment_instance.get_callback_response(False)
+
+    # 充值订单回调处理（无商品发货流程）
+    if recharge_order and not order:
+        if recharge_order.status != 0:
+            return payment_instance.get_callback_response(True)
+
+        if abs(float(recharge_order.amount) - callback_result.amount) > 0.01:
+            logger.warning(
+                f"Recharge amount mismatch: order={recharge_order.amount}, callback={callback_result.amount}"
+            )
+            return payment_instance.get_callback_response(False)
+
+        user_result = await db.execute(
+            select(User).where(User.id == recharge_order.user_id)
+        )
+        user = user_result.scalar_one_or_none()
+        if not user:
+            logger.warning(f"Recharge user not found: {recharge_order.user_id}")
+            return payment_instance.get_callback_response(False)
+
+        recharge_order.status = 1
+        recharge_order.paid_at = datetime.utcnow()
+        recharge_order.external_trade_no = callback_result.external_trade_no
+
+        user.balance = Decimal(str(user.balance or 0)) + Decimal(str(recharge_order.actual_amount or 0))
+        user.total_recharge = Decimal(str(user.total_recharge or 0)) + Decimal(str(recharge_order.amount or 0))
+
+        bill = Bill(
+            user_id=user.id,
+            amount=Decimal(str(recharge_order.actual_amount or 0)),
+            balance=Decimal(str(user.balance or 0)),
+            type=1,
+            currency=0,
+            description=f"充值到账[{recharge_order.trade_no}]",
+            order_trade_no=recharge_order.trade_no,
+        )
+        db.add(bill)
+
+        await hooks.emit(
+            Events.PAYMENT_CALLBACK,
+            {
+                "recharge_order": recharge_order,
+                "handler": handler,
+                "callback_data": data,
+            },
+        )
+        await hooks.emit(
+            Events.USER_RECHARGED,
+            {
+                "user": user,
+                "recharge_order": recharge_order,
+                "amount": float(recharge_order.actual_amount or 0),
+            },
+        )
+
+        await db.commit()
+        logger.info(f"Recharge order {recharge_order.trade_no} paid successfully")
+        return payment_instance.get_callback_response(True)
     
     # 5. 避免重复处理
     if order.status != 0:
@@ -226,9 +293,15 @@ async def payment_return(handler: str, request: Request, db: DbSession):
     out_trade_no = data.get("out_trade_no", "")
     trade_status = data.get("trade_status", "")
 
-    # 构建前端订单查询页 URL（从请求头自动检测域名）
+    # 构建前端跳转 URL（商品单 -> /query，充值单 -> /user/recharge）
     base_url = get_base_url(request)
     frontend_url = f"{base_url}/query?trade_no={out_trade_no}"
+    if out_trade_no:
+        recharge_result = await db.execute(
+            select(RechargeOrder.id).where(RechargeOrder.trade_no == out_trade_no).limit(1)
+        )
+        if recharge_result.scalar_one_or_none():
+            frontend_url = f"{base_url}/user/recharge?trade_no={out_trade_no}"
 
     # 如果支付成功，尝试走回调逻辑处理订单
     if trade_status == "TRADE_SUCCESS" and out_trade_no:

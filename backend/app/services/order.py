@@ -77,6 +77,11 @@ class OrderService:
             unit_price = self._apply_config_pricing(
                 commodity.config, unit_price, race, quantity
             )
+        else:
+            # 无种类维度时，应用全局批发规则（新字段优先，旧配置兼容）
+            unit_price = self._apply_global_wholesale_pricing(
+                commodity, unit_price, quantity
+            )
         
         amount = unit_price * quantity
         draft_premium = Decimal("0")
@@ -175,6 +180,75 @@ class OrderService:
                     else:
                         unit_price = rule_val
         
+        return unit_price
+
+    @staticmethod
+    def _apply_global_wholesale_pricing(
+        commodity: Commodity,
+        base_price: Decimal,
+        quantity: int,
+    ) -> Decimal:
+        """应用全局批发规则（wholesale_config 优先，config[wholesale] 兜底）。"""
+        rules: List[tuple[int, str, Decimal]] = []
+
+        # 1) 新字段: wholesale_config(JSON)
+        if commodity.wholesale_config:
+            try:
+                config_items = json_lib.loads(commodity.wholesale_config)
+                if isinstance(config_items, list):
+                    for item in config_items:
+                        if not isinstance(item, dict):
+                            continue
+                        qty = int(item.get("quantity", 0))
+                        if qty <= 0:
+                            continue
+                        if item.get("type") == "percent" or item.get("discount_percent") is not None:
+                            discount_percent = item.get("discount_percent")
+                            if discount_percent is None:
+                                continue
+                            rules.append((qty, "percent", Decimal(str(discount_percent))))
+                        elif item.get("price") is not None:
+                            rules.append((qty, "fixed", Decimal(str(item.get("price")))))
+            except Exception:
+                rules = []
+
+        # 2) 兼容旧字段: config 中的 [wholesale]（仅在新字段无有效规则时）
+        if not rules and commodity.config:
+            current_section = None
+            for line in commodity.config.strip().split("\n"):
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("[") and line.endswith("]"):
+                    current_section = line[1:-1].lower()
+                    continue
+                if current_section != "wholesale" or "=" not in line:
+                    continue
+
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip()
+                try:
+                    qty = int(key)
+                    if qty <= 0:
+                        continue
+                    if value.endswith("%"):
+                        rules.append((qty, "percent", Decimal(value[:-1])))
+                    else:
+                        rules.append((qty, "fixed", Decimal(value)))
+                except Exception:
+                    continue
+
+        unit_price = base_price
+        if rules:
+            rules.sort(key=lambda x: x[0])
+            for min_qty, rule_type, rule_val in rules:
+                if quantity >= min_qty:
+                    if rule_type == "percent":
+                        unit_price = base_price * rule_val / Decimal("100")
+                    else:
+                        unit_price = rule_val
+
         return unit_price
     
     async def create_order(

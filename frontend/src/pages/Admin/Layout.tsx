@@ -108,7 +108,7 @@ export default function AdminLayout() {
   ]
 
   const userMenuItems = [
-    { key: 'profile', label: '个人资料', icon: <UserOutlined /> },
+    { key: 'profile', label: '个人中心', icon: <UserOutlined />, onClick: () => navigate('/user') },
     { key: 'home', label: '返回前台', icon: <ShoppingOutlined />, onClick: () => navigate('/') },
     { type: 'divider' as const },
     { key: 'logout', label: '退出登录', icon: <LogoutOutlined />, onClick: handleLogout, danger: true },

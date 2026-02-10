@@ -1,13 +1,14 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
-  Card, Button, Input, Form, Spin, message, Modal, 
-  Typography, Tag, Divider, InputNumber
+  Card, Button, Input, Form, Spin, message, Modal,
+  Typography, Tag, Divider, InputNumber, Avatar, Dropdown
 } from 'antd'
 import { 
   ShoppingCartOutlined, SearchOutlined,
   MinusOutlined, PlusOutlined,
-  WechatOutlined, AlipayCircleOutlined, WalletOutlined
+  WechatOutlined, AlipayCircleOutlined, WalletOutlined,
+  UserOutlined, LogoutOutlined, SettingOutlined
 } from '@ant-design/icons'
 import { getCommodityDetail, getPayments, CommodityDetail, PaymentMethod, SkuConfig } from '../../api/shop'
 import { createOrder, getOrder } from '../../api/order'
@@ -54,7 +55,20 @@ export default function Product() {
   // 粒子特效开关
   const [particleEnabled, setParticleEnabled] = useState(true)
   
-  const { user } = useAuthStore()
+  const { user, logout } = useAuthStore()
+
+  const handleLogout = () => {
+    logout()
+    navigate('/')
+  }
+
+  const userMenuItems: any[] = [
+    { key: 'center', label: '个人中心', icon: <UserOutlined />, onClick: () => navigate('/user') },
+    { key: 'orders', label: '我的订单', icon: <ShoppingCartOutlined />, onClick: () => navigate('/user/orders') },
+    user?.is_admin ? { key: 'admin', label: '管理后台', icon: <SettingOutlined />, onClick: () => navigate('/admin') } : null,
+    { type: 'divider' as const },
+    { key: 'logout', label: '退出登录', icon: <LogoutOutlined />, onClick: handleLogout, danger: true },
+  ].filter(Boolean)
 
   useEffect(() => {
     if (id) {
@@ -366,16 +380,34 @@ export default function Product() {
             <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">LecFaka</span>
           </Link>
           <nav className="flex items-center gap-6">
-            <Link to="/" className="text-gray-600 hover:text-blue-500 flex items-center gap-1">
+            <Link
+              to="/"
+              className="no-underline px-4 py-1.5 rounded-full border border-gray-200 text-gray-700 hover:text-pink-500 hover:border-pink-300 hover:bg-pink-50 transition-all flex items-center gap-1 font-medium"
+            >
               <ShoppingCartOutlined /> 购物
             </Link>
-            <Link to="/query" className="text-gray-600 hover:text-blue-500 flex items-center gap-1">
+            <Link
+              to="/query"
+              className="no-underline px-4 py-1.5 rounded-full border border-gray-200 text-gray-700 hover:text-pink-500 hover:border-pink-300 hover:bg-pink-50 transition-all flex items-center gap-1 font-medium"
+            >
               <SearchOutlined /> 订单查询
             </Link>
           </nav>
           <div className="flex items-center gap-4">
             {user ? (
-              <Link to="/user" className="text-blue-500 font-medium">{user.username}</Link>
+              <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
+                <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 rounded-lg px-3 py-1.5 transition-colors">
+                  <Avatar
+                    src={user.avatar}
+                    icon={<UserOutlined />}
+                    className="bg-gradient-to-br from-blue-500 to-purple-600"
+                  />
+                  <div className="hidden md:block">
+                    <div className="text-sm font-medium text-gray-700">{user.username}</div>
+                    <div className="text-xs text-orange-500">余额: ¥{(user.balance || 0).toFixed(2)}</div>
+                  </div>
+                </div>
+              </Dropdown>
             ) : (
               <>
                 <Link to="/login" className="text-gray-600 hover:text-blue-500">登录</Link>

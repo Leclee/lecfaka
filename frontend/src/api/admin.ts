@@ -110,15 +110,14 @@ export interface CommodityDetail extends Commodity {
   delivery_auto_mode: number
   delivery_message?: string
   contact_type: number
+  send_email: number
   password_status: number
   draft_status: number
   draft_premium: number
+  purchase_count: number
   minimum: number
   maximum: number
   only_user: number
-  widget?: string
-  leave_message?: string
-  send_email: number
   coupon: number
   api_status: number
   recommend: number
@@ -126,6 +125,10 @@ export interface CommodityDetail extends Commodity {
   inventory_hidden: number
   seckill_status: number
   level_disable: number
+  level_price?: string
+  wholesale_config?: string
+  widget?: string
+  leave_message?: string
 }
 
 export interface CommodityForm {
@@ -137,12 +140,28 @@ export interface CommodityForm {
   user_price: number
   factory_price?: number
   delivery_way?: number
+  delivery_auto_mode?: number
+  delivery_message?: string
   contact_type?: number
+  send_email?: number
   password_status?: number
   draft_status?: number
+  draft_premium?: number
+  purchase_count?: number
   minimum?: number
   maximum?: number
   only_user?: number
+  coupon?: number
+  api_status?: number
+  recommend?: number
+  hide?: number
+  inventory_hidden?: number
+  seckill_status?: number
+  level_disable?: number
+  level_price?: string
+  wholesale_config?: string
+  widget?: string
+  leave_message?: string
   sort?: number
   status?: number
 }
