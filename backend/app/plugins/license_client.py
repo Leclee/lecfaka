@@ -108,3 +108,32 @@ async def check_updates(installed_plugins: Dict[str, str]) -> Dict[str, Any]:
     except Exception as e:
         logger.debug(f"Update check failed: {e}")
         return {"plugin_updates": [], "app_update": None}
+
+
+async def rebind_license(license_key: str, new_domain: str) -> Dict[str, Any]:
+    """向 store 服务器请求换绑域名"""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{STORE_URL}/api/v1/license/rebind",
+                json={
+                    "license_key": license_key,
+                    "new_domain": new_domain,
+                },
+            )
+            return resp.json()
+    except Exception as e:
+        return {"success": False, "message": f"授权服务器连接失败: {e}"}
+
+
+async def get_license_info(license_key: str) -> Dict[str, Any]:
+    """向 store 查询授权码的绑定状态"""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{STORE_URL}/api/v1/license/info",
+                json={"license_key": license_key},
+            )
+            return resp.json()
+    except Exception as e:
+        return {"found": False, "message": f"授权服务器连接失败: {e}"}
