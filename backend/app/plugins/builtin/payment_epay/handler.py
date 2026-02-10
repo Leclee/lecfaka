@@ -74,6 +74,7 @@ class EpayPaymentPlugin(PaymentPluginBase):
         errors = self.validate_config()
         if errors:
             return PaymentResult(success=False, error_msg="; ".join(errors))
+        channel = (channel or "alipay").strip().lower()
 
         # 从 kwargs 获取商品名称，没有则用订单号
         product_name = kwargs.get("product_name") or trade_no
@@ -113,10 +114,13 @@ class EpayPaymentPlugin(PaymentPluginBase):
 
                 # payurl -> 直接跳转
                 if result.get("payurl"):
+                    payurl_val = result["payurl"]
+                    if isinstance(payurl_val, str) and payurl_val.startswith("/"):
+                        payurl_val = f"{self.url}{payurl_val}"
                     return PaymentResult(
                         success=True,
                         payment_type=PaymentType.REDIRECT,
-                        payment_url=result["payurl"],
+                        payment_url=payurl_val,
                     )
 
                 # qrcode -> 二维码

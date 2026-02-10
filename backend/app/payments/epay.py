@@ -55,6 +55,7 @@ class EpayPayment(PaymentBase):
         if not self.validate_config():
             return PaymentResult(success=False, error_msg="支付配置不完整")
         
+        channel = (channel or "alipay").strip().lower()
         product_name = kwargs.get("product_name") or trade_no
         
         params = {
@@ -90,10 +91,13 @@ class EpayPayment(PaymentBase):
                     )
                 
                 if result.get("payurl"):
+                    payurl_val = result["payurl"]
+                    if isinstance(payurl_val, str) and payurl_val.startswith("/"):
+                        payurl_val = f"{self.url}{payurl_val}"
                     return PaymentResult(
                         success=True,
                         payment_type=PaymentType.REDIRECT,
-                        payment_url=result["payurl"]
+                        payment_url=payurl_val
                     )
                 
                 if result.get("qrcode"):
