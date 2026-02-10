@@ -230,8 +230,6 @@ async def _handle_callback(handler: str, request: Request, db):
     
     # 11. 处理分销佣金（Decimal 精度）
     if order.from_user_id:
-        from decimal import Decimal
-        from ...models.bill import Bill
         promoter_result = await db.execute(
             select(User).where(User.id == order.from_user_id)
         )

@@ -381,6 +381,7 @@ async def get_commodity_detail(
         .where(Order.commodity_id == commodity.id)
         .where(Order.status == 1)
     )
+    sold_count = sold_result.scalar() or 0
     
     result = {
         "id": commodity.id,
