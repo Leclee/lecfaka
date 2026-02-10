@@ -1,15 +1,26 @@
 import { useEffect, useState } from 'react'
-import { Table, Button, Input, Tabs, Tag, Card, Typography, message } from 'antd'
-import { SearchOutlined, ShoppingCartOutlined, LinkOutlined } from '@ant-design/icons'
+import { Table, Button, Input, Tabs, Tag, Card, Typography, message, Modal, Space, Tooltip } from 'antd'
+import { SearchOutlined, ShoppingCartOutlined, LinkOutlined, CopyOutlined, CheckCircleOutlined, KeyOutlined } from '@ant-design/icons'
 import * as adminApi from '../../api/admin'
 
-const { Title } = Typography
+const { Title, Text, Paragraph } = Typography
 
 export default function Store() {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<any[]>([])
   const [keyword, setKeyword] = useState('')
   const [activeTab, setActiveTab] = useState('all')
+  const [purchasing, setPurchasing] = useState(false)
+
+  /** 购买结果弹窗 */
+  const [purchaseResult, setPurchaseResult] = useState<{
+    visible: boolean
+    licenseKey?: string
+    orderNo?: string
+    pluginName?: string
+    price?: number
+    rebindLimit?: number
+  }>({ visible: false })
 
   const loadData = async () => {
     setLoading(true)
@@ -28,7 +39,6 @@ export default function Store() {
       })
       setData(res.items || [])
     } catch {
-      // store 服务器可能未部署，使用空数据
       setData([])
     } finally {
       setLoading(false)
@@ -37,12 +47,48 @@ export default function Store() {
 
   useEffect(() => { loadData() }, [activeTab])
 
-  const handleInstall = async (pluginId: string) => {
+  /** 购买插件 */
+  const handlePurchase = async (pluginId: string, pluginName: string, isFree: boolean) => {
+    if (isFree) {
+      // 免费插件直接安装
+      try {
+        const res = await adminApi.installFromStore(pluginId)
+        message.success(res.message)
+      } catch (e: any) {
+        message.error(e.message || '安装失败')
+      }
+      return
+    }
+
+    // 付费插件 → 购买 → 弹窗显示授权码
+    setPurchasing(true)
     try {
-      const res = await adminApi.installFromStore(pluginId)
-      message.success(res.message)
+      const res = await adminApi.purchasePlugin(pluginId)
+      if (res.success && res.license_key) {
+        setPurchaseResult({
+          visible: true,
+          licenseKey: res.license_key,
+          orderNo: res.order_no,
+          pluginName: res.plugin_name || pluginName,
+          price: res.price,
+          rebindLimit: res.rebind_limit,
+        })
+        loadData() // 刷新列表
+      } else {
+        message.error(res.message || '购买失败')
+      }
     } catch (e: any) {
-      message.error(e.message || '安装失败')
+      message.error(e.message || '购买失败，请检查商店服务器是否正常')
+    } finally {
+      setPurchasing(false)
+    }
+  }
+
+  /** 复制授权码 */
+  const copyLicenseKey = () => {
+    if (purchaseResult.licenseKey) {
+      navigator.clipboard.writeText(purchaseResult.licenseKey)
+      message.success('授权码已复制到剪贴板')
     }
   }
 
@@ -92,7 +138,13 @@ export default function Store() {
       key: 'action',
       width: 120,
       render: (_: any, r: any) => (
-        <Button type="primary" size="small" icon={<ShoppingCartOutlined />} onClick={() => handleInstall(r.id)}>
+        <Button
+          type="primary"
+          size="small"
+          icon={r.is_free ? <ShoppingCartOutlined /> : <KeyOutlined />}
+          loading={purchasing}
+          onClick={() => handlePurchase(r.id, r.name, r.is_free)}
+        >
           {r.is_free ? '安装' : '立即购买'}
         </Button>
       ),
@@ -123,6 +175,70 @@ export default function Store() {
           locale={{ emptyText: data.length === 0 && !loading ? '插件商店服务器暂未部署，请先部署 lecfaka-store' : undefined }}
         />
       </Card>
+
+      {/* 购买成功弹窗 */}
+      <Modal
+        title={
+          <Space>
+            <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 20 }} />
+            <span>购买成功</span>
+          </Space>
+        }
+        open={purchaseResult.visible}
+        onCancel={() => setPurchaseResult({ visible: false })}
+        footer={[
+          <Button key="copy" type="primary" icon={<CopyOutlined />} onClick={copyLicenseKey}>
+            复制授权码
+          </Button>,
+          <Button key="close" onClick={() => setPurchaseResult({ visible: false })}>
+            关闭
+          </Button>,
+        ]}
+        width={520}
+      >
+        <div style={{ padding: '16px 0' }}>
+          <Paragraph>
+            <Text strong>插件：</Text> {purchaseResult.pluginName}
+          </Paragraph>
+          {purchaseResult.price !== undefined && purchaseResult.price > 0 && (
+            <Paragraph>
+              <Text strong>价格：</Text> <Text type="danger">¥{purchaseResult.price}</Text>
+            </Paragraph>
+          )}
+          <Paragraph>
+            <Text strong>订单号：</Text> <Text copyable>{purchaseResult.orderNo}</Text>
+          </Paragraph>
+
+          <div style={{
+            background: '#f6ffed',
+            border: '1px solid #b7eb8f',
+            borderRadius: 8,
+            padding: '16px 20px',
+            margin: '16px 0',
+            textAlign: 'center',
+          }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>您的授权码</Text>
+            <div style={{ margin: '8px 0' }}>
+              <Tooltip title="点击复制">
+                <Text
+                  strong
+                  style={{ fontSize: 20, letterSpacing: 1, cursor: 'pointer' }}
+                  onClick={copyLicenseKey}
+                >
+                  {purchaseResult.licenseKey}
+                </Text>
+              </Tooltip>
+            </div>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              可换绑域名 {purchaseResult.rebindLimit || 3} 次 · 首次激活自动绑定当前域名
+            </Text>
+          </div>
+
+          <Paragraph type="secondary" style={{ fontSize: 13 }}>
+            请前往 <Text strong>系统管理 → 插件管理</Text> 找到该插件，输入授权码并启用。
+          </Paragraph>
+        </div>
+      </Modal>
     </div>
   )
 }

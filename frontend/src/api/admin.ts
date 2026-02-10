@@ -853,3 +853,15 @@ export const getStorePlugins = (params?: { type?: string; keyword?: string; cate
 export const installFromStore = (pluginId: string, licenseKey?: string): Promise<{ message: string }> => {
   return api.post('/admin/plugins/store/install', null, { params: { plugin_id: pluginId, license_key: licenseKey || '' } })
 }
+
+export const purchasePlugin = (pluginId: string, buyerEmail?: string): Promise<{
+  success: boolean
+  message: string
+  license_key?: string
+  order_no?: string
+  plugin_name?: string
+  price?: number
+  rebind_limit?: number
+}> => {
+  return api.post('/admin/plugins/store/purchase', { plugin_id: pluginId, buyer_email: buyerEmail || '' })
+}

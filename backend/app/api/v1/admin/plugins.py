@@ -17,7 +17,7 @@ from ....database import get_db
 from ....api.deps import get_current_admin
 from ....models.plugin import Plugin
 from ....plugins import plugin_manager
-from ....plugins.license_client import verify_license, get_store_plugins, download_plugin, check_updates, APP_VERSION
+from ....plugins.license_client import verify_license, get_store_plugins, download_plugin, check_updates, purchase_plugin, APP_VERSION
 from ....utils.request import get_base_url
 
 router = APIRouter()
@@ -47,6 +47,30 @@ async def proxy_store(
 ):
     """代理获取插件商店列表"""
     return await get_store_plugins(type=type, keyword=keyword, category=category)
+
+
+class PurchaseBody(BaseModel):
+    plugin_id: str
+    buyer_email: str = ""
+
+
+@router.post("/store/purchase")
+async def purchase_from_store(
+    body: PurchaseBody,
+    request: Request,
+    admin=Depends(get_current_admin),
+):
+    """
+    购买插件 → 自动生成授权码 → 返回给前端显示。
+    域名从当前请求的 Host 自动获取。
+    """
+    domain = get_base_url(request).replace("https://", "").replace("http://", "").split("/")[0]
+    result = await purchase_plugin(
+        plugin_id=body.plugin_id,
+        buyer_email=body.buyer_email,
+        domain=domain,
+    )
+    return result
 
 
 @router.post("/store/install")

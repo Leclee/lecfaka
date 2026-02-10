@@ -137,3 +137,26 @@ async def get_license_info(license_key: str) -> Dict[str, Any]:
             return resp.json()
     except Exception as e:
         return {"found": False, "message": f"授权服务器连接失败: {e}"}
+
+
+async def purchase_plugin(plugin_id: str, buyer_email: str = "", domain: str = "") -> Dict[str, Any]:
+    """
+    向 store 服务器购买插件，自动生成授权码。
+
+    Returns:
+        成功: {"success": True, "license_key": "LF-XXXX-...", "order_no": "ORD-...", ...}
+        失败: {"success": False, "message": "..."}
+    """
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{STORE_URL}/api/v1/store/purchase",
+                json={
+                    "plugin_id": plugin_id,
+                    "buyer_email": buyer_email,
+                    "domain": domain,
+                },
+            )
+            return resp.json()
+    except Exception as e:
+        return {"success": False, "message": f"商店连接失败: {e}"}
