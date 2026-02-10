@@ -90,6 +90,17 @@ class EpayPayment(PaymentBase):
                         error_msg=result.get("msg", "支付请求失败")
                     )
                 
+                qrcode_val = result.get("qrcode") or result.get("img")
+                if isinstance(qrcode_val, str) and qrcode_val:
+                    if qrcode_val.startswith("/"):
+                        qrcode_val = f"{self.url}{qrcode_val}"
+                    return PaymentResult(
+                        success=True,
+                        payment_type=PaymentType.QRCODE,
+                        qrcode_url=qrcode_val,
+                        extra={"return_url": return_url, "epay_trade_no": result.get("trade_no", ""), "channel": channel}
+                    )
+
                 if result.get("payurl"):
                     payurl_val = result["payurl"]
                     if isinstance(payurl_val, str) and payurl_val.startswith("/"):
