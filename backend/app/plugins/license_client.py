@@ -19,6 +19,18 @@ APP_VERSION = "1.0.0"
 STORE_URL = getattr(settings, "store_url", None) or "https://plugins.leclee.top"
 
 
+def _safe_json(resp) -> Dict[str, Any]:
+    """
+    安全地解析 HTTP 响应的 JSON。
+    如果 Store 返回非 JSON（如 500 Internal Server Error），
+    不会抛出异常，而是返回包含错误信息的字典。
+    """
+    try:
+        return resp.json()
+    except Exception:
+        return {"error": f"Store 返回异常 (HTTP {resp.status_code}): {resp.text[:200]}"}
+
+
 async def verify_domain(plugin_id: str, domain: str) -> Dict[str, Any]:
     """
     向 store 验证域名是否有权使用某插件。
@@ -31,7 +43,7 @@ async def verify_domain(plugin_id: str, domain: str) -> Dict[str, Any]:
                 f"{STORE_URL}/api/v1/license/verify",
                 json={"plugin_id": plugin_id, "domain": domain},
             )
-            return resp.json()
+            return _safe_json(resp)
     except Exception as e:
         return {"valid": False, "message": f"授权服务器连接失败: {e}"}
 
@@ -71,7 +83,7 @@ async def get_store_plugins(
                 params=params,
                 headers=headers,
             )
-            return resp.json()
+            return _safe_json(resp)
     except Exception as e:
         return {"items": [], "error": f"商店连接失败: {e}"}
 
@@ -188,7 +200,7 @@ async def get_payment_gateways() -> Dict[str, Any]:
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(f"{STORE_URL}/api/v1/pay/gateways")
-            return resp.json()
+            return _safe_json(resp)
     except Exception as e:
         return {"gateways": []}
 
@@ -201,7 +213,7 @@ async def store_login(account: str, password: str) -> Dict[str, Any]:
                 f"{STORE_URL}/api/v1/auth/login",
                 json={"account": account, "password": password},
             )
-            data = resp.json()
+            data = _safe_json(resp)
             if resp.status_code >= 400:
                 return {"success": False, "message": data.get("detail", "登录失败")}
             return {"success": True, **data}
@@ -217,7 +229,7 @@ async def store_register(username: str, email: str, password: str) -> Dict[str, 
                 f"{STORE_URL}/api/v1/auth/register",
                 json={"username": username, "email": email, "password": password},
             )
-            data = resp.json()
+            data = _safe_json(resp)
             if resp.status_code >= 400:
                 return {"success": False, "message": data.get("detail", "注册失败")}
             return {"success": True, **data}
@@ -233,6 +245,6 @@ async def get_my_plugins(store_token: str) -> Dict[str, Any]:
                 f"{STORE_URL}/api/v1/store/my-plugins",
                 headers={"Authorization": f"Bearer {store_token}"},
             )
-            return resp.json()
+            return _safe_json(resp)
     except Exception as e:
         return {"items": [], "error": f"商店连接失败: {e}"}
