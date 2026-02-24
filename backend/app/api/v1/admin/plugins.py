@@ -282,7 +282,7 @@ async def get_plugin_detail(
     )
     db_plugin = result.scalar_one_or_none()
     
-    return {
+    details = {
         "id": pi.meta.id,
         "name": pi.meta.name,
         "version": pi.meta.version,
@@ -304,6 +304,13 @@ async def get_plugin_detail(
         "license_key": db_plugin.license_key if db_plugin else "",
         "installed_at": db_plugin.installed_at.isoformat() if db_plugin and db_plugin.installed_at else None,
     }
+
+    if pi.meta.type == "theme" and pi.instance and hasattr(pi.instance, 'all_themes'):
+        themes = pi.instance.all_themes
+        details["theme_variations"] = [{"id": tid, "name": t.name} for tid, t in themes.items()]
+        details["active_theme_id"] = pi.instance._active_theme_id if hasattr(pi.instance, '_active_theme_id') else "default"
+
+    return details
 
 
 # ============== 安装 / 卸载 ==============

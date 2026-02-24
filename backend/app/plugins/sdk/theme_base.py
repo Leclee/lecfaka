@@ -85,6 +85,7 @@ class ThemeConfig:
     @brief 完整的主题配置
     @details 包含颜色、字体、布局、特效四大部分
     """
+    id: str = "default"                 ## 主题内部ID（同一插件包多主题时区分）
     name: str = "默认主题"
     mode: str = "light"                 ## light | dark
     colors: ThemeColors = field(default_factory=ThemeColors)
@@ -176,6 +177,7 @@ class ThemeConfig:
         @brief 序列化为完整字典，用于 API 响应
         """
         return {
+            "id": self.id,
             "name": self.name,
             "mode": self.mode,
             "css_variables": self.to_css_variables(dark=False),
@@ -190,33 +192,66 @@ class ThemeConfig:
 class ThemePluginBase(PluginBase):
     """
     @brief 主题插件基类
-    @details 所有主题插件必须继承此类，并实现 get_theme_config 方法
+    @details 所有主题插件必须继承此类，通过 get_all_themes 返回该包包含的主题，或者为了兼容仅实现 get_theme_config 。
     """
 
     def __init__(self, meta: PluginMeta, config: Dict[str, Any]):
         super().__init__(meta, config)
-        self._theme_config: Optional[ThemeConfig] = None
+        self._theme_configs: Dict[str, ThemeConfig] = {}
+        self._active_theme_id: str = "default"
 
-    @abstractmethod
     def get_theme_config(self) -> ThemeConfig:
         """
-        @brief 获取主题配置
-        @return ThemeConfig 完整的主题配置对象
+        @brief （向后兼容）获取单个主题配置
+        @details 新插件如果不想要单主题模式，请覆盖 get_all_themes 即可，不用实现此方法。
         """
-        ...
+        raise NotImplementedError("Theme must implement get_all_themes or get_theme_config")
+
+    def get_all_themes(self) -> Dict[str, ThemeConfig]:
+        """
+        @brief 获取此主题包内所有的主题配置
+        @return Dict[str, ThemeConfig] 主题id -> 主题配置
+        """
+        # 兼容旧版本插件单主题写法
+        try:
+            single = self.get_theme_config()
+            return {single.id: single}
+        except NotImplementedError:
+            return {}
 
     async def on_enable(self) -> None:
         """@brief 启用时构建并缓存主题配置"""
         await super().on_enable()
-        self._theme_config = self.get_theme_config()
-        self.logger.info(f"Theme loaded: {self._theme_config.name}")
+        self._theme_configs = self.get_all_themes()
+        
+        # 加载配置的激活主题，若无且有多个则默认第一个
+        saved_id = self.config.get("active_theme_id", "")
+        if saved_id in self._theme_configs:
+            self._active_theme_id = saved_id
+        elif self._theme_configs:
+            self._active_theme_id = list(self._theme_configs.keys())[0]
+            
+        self.logger.info(f"Theme pack loaded: {self.meta.name}, active variations: {len(self._theme_configs)}")
 
     async def on_disable(self) -> None:
         """@brief 禁用时清理缓存"""
-        self._theme_config = None
+        self._theme_configs = {}
         await super().on_disable()
 
     @property
     def theme_config(self) -> Optional[ThemeConfig]:
-        """@brief 获取缓存的主题配置"""
-        return self._theme_config
+        """@brief 获取目前被激活的主题配置（供全局调用）"""
+        return self._theme_configs.get(self._active_theme_id)
+
+    @property
+    def all_themes(self) -> Dict[str, ThemeConfig]:
+        """@brief 获取包内所有主题配置"""
+        return self._theme_configs
+
+    def set_active_theme_id(self, theme_id: str) -> bool:
+        """@brief 切换本插件包内的活动主题 ID"""
+        if theme_id in self._theme_configs:
+            self._active_theme_id = theme_id
+            self.config["active_theme_id"] = theme_id
+            return True
+        return False
