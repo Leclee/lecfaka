@@ -213,6 +213,15 @@ export default function Store() {
     }
   }
 
+  const handleInstall = async (pluginId: string) => {
+    try {
+      const res = await adminApi.installFromStore(pluginId, storeToken)
+      message.success(res.message)
+    } catch (e: any) {
+      message.error(e.message || '安装失败')
+    }
+  }
+
   /** 创建支付订单 → 打开支付页面 */
   const handleCreatePayment = async () => {
     if (!paymentModal.pluginId) return
@@ -305,10 +314,20 @@ export default function Store() {
       title: '操作',
       key: 'action',
       width: 120,
-      render: (_: any, r: any) => (
-        r.purchased ? (
-          <Button size="small" disabled>已购买</Button>
-        ) : (
+      render: (_: any, r: any) => {
+        if (r.purchased) {
+          return (
+            <Button
+              type="primary"
+              size="small"
+              icon={<ShoppingCartOutlined />}
+              onClick={() => handleInstall(r.id)}
+            >
+              安装
+            </Button>
+          )
+        }
+        return (
           <Button
             type="primary"
             size="small"
@@ -319,7 +338,7 @@ export default function Store() {
             {r.is_free ? '安装' : '立即购买'}
           </Button>
         )
-      ),
+      },
     },
   ]
 
