@@ -157,9 +157,9 @@ async def install_from_store(
     admin=Depends(get_current_admin),
 ):
     """从商店一键安装插件"""
-    data = await download_plugin(plugin_id, license_key)
+    data, error = await download_plugin(plugin_id, license_key)
     if not data:
-        return {"message": "插件下载失败"}
+        return {"message": f"插件下载失败: {error or '未知原因'}"}
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
         tmp.write(data)

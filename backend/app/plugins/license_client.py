@@ -88,8 +88,12 @@ async def get_store_plugins(
         return {"items": [], "error": f"商店连接失败: {e}"}
 
 
-async def download_plugin(plugin_id: str, license_key: str = "") -> Optional[bytes]:
-    """从 store 下载插件 zip"""
+async def download_plugin(plugin_id: str, license_key: str = ""):
+    """
+    从 store 下载插件 zip
+
+    返回 (bytes, None) 或 (None, error_msg)
+    """
     try:
         async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=60) as client:
             resp = await client.get(
@@ -97,10 +101,21 @@ async def download_plugin(plugin_id: str, license_key: str = "") -> Optional[byt
                 headers={"Authorization": f"Bearer {license_key}"} if license_key else {},
             )
             if resp.status_code == 200:
-                return resp.content
-            return None
-    except Exception:
-        return None
+                ct = resp.headers.get("content-type", "")
+                if "json" in ct:
+                    ## 服务端返回了 JSON 错误
+                    return None, resp.json().get("detail", "未知错误")
+                return resp.content, None
+            ## 非 200
+            try:
+                detail = resp.json().get("detail", resp.text[:200])
+            except Exception:
+                detail = resp.text[:200]
+            logger.error(f"[download_plugin] status={resp.status_code}, detail={detail}")
+            return None, f"商店返回 {resp.status_code}: {detail}"
+    except Exception as e:
+        logger.error(f"[download_plugin] exception: {e}")
+        return None, f"网络错误: {e}"
 
 
 async def check_updates(installed_plugins: Dict[str, str]) -> Dict[str, Any]:
