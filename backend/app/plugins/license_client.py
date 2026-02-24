@@ -38,7 +38,7 @@ async def verify_domain(plugin_id: str, domain: str) -> Dict[str, Any]:
     新版本不再需要授权码，直接用 plugin_id + domain 验证。
     """
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
             resp = await client.post(
                 f"{STORE_URL}/api/v1/license/verify",
                 json={"plugin_id": plugin_id, "domain": domain},
@@ -77,7 +77,7 @@ async def get_store_plugins(
         if store_token:
             headers["Authorization"] = f"Bearer {store_token}"
 
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
             resp = await client.get(
                 f"{STORE_URL}/api/v1/store/plugins",
                 params=params,
@@ -91,7 +91,7 @@ async def get_store_plugins(
 async def download_plugin(plugin_id: str, license_key: str = "") -> Optional[bytes]:
     """从 store 下载插件 zip"""
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=60) as client:
             resp = await client.get(
                 f"{STORE_URL}/api/v1/store/download/{plugin_id}",
                 headers={"Authorization": f"Bearer {license_key}"} if license_key else {},
@@ -106,7 +106,7 @@ async def download_plugin(plugin_id: str, license_key: str = "") -> Optional[byt
 async def check_updates(installed_plugins: Dict[str, str]) -> Dict[str, Any]:
     """向商店检查主程序和插件更新"""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
             resp = await client.post(
                 f"{STORE_URL}/api/v1/store/check-updates",
                 json={"plugins": installed_plugins, "app_version": APP_VERSION},
@@ -133,7 +133,7 @@ async def purchase_plugin(
         if store_token:
             headers["Authorization"] = f"Bearer {store_token}"
 
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
             resp = await client.post(
                 f"{STORE_URL}/api/v1/store/purchase",
                 json={"plugin_id": plugin_id},
@@ -160,7 +160,7 @@ async def create_payment_order(
     """
     try:
         headers = {"Authorization": f"Bearer {store_token}"}
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
             resp = await client.post(
                 f"{STORE_URL}/api/v1/pay/create-order",
                 json={
@@ -182,7 +182,7 @@ async def query_payment_status(order_no: str, store_token: str) -> Dict[str, Any
     """查询支付订单状态"""
     try:
         headers = {"Authorization": f"Bearer {store_token}"}
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
             resp = await client.get(
                 f"{STORE_URL}/api/v1/pay/status/{order_no}",
                 headers=headers,
@@ -198,7 +198,7 @@ async def query_payment_status(order_no: str, store_token: str) -> Dict[str, Any
 async def get_payment_gateways() -> Dict[str, Any]:
     """获取可用的支付网关列表"""
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=10) as client:
             resp = await client.get(f"{STORE_URL}/api/v1/pay/gateways")
             return _safe_json(resp)
     except Exception as e:
@@ -208,7 +208,7 @@ async def get_payment_gateways() -> Dict[str, Any]:
 async def store_login(account: str, password: str) -> Dict[str, Any]:
     """登录 Store 账号，获取 JWT token"""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
             resp = await client.post(
                 f"{STORE_URL}/api/v1/auth/login",
                 json={"account": account, "password": password},
@@ -224,7 +224,7 @@ async def store_login(account: str, password: str) -> Dict[str, Any]:
 async def store_register(username: str, email: str, password: str) -> Dict[str, Any]:
     """注册 Store 账号"""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
             resp = await client.post(
                 f"{STORE_URL}/api/v1/auth/register",
                 json={"username": username, "email": email, "password": password},
@@ -240,7 +240,7 @@ async def store_register(username: str, email: str, password: str) -> Dict[str, 
 async def get_my_plugins(store_token: str) -> Dict[str, Any]:
     """获取用户在商店购买的插件列表"""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
             resp = await client.get(
                 f"{STORE_URL}/api/v1/store/my-plugins",
                 headers={"Authorization": f"Bearer {store_token}"},
