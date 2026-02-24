@@ -846,7 +846,7 @@ export const activateLicense = (pluginId: string, licenseKey: string): Promise<{
   return api.post(`/admin/plugins/${pluginId}/license`, { license_key: licenseKey })
 }
 
-export const getStorePlugins = (params?: { type?: string; keyword?: string; category?: string }): Promise<{ items: any[] }> => {
+export const getStorePlugins = (params?: { type?: string; keyword?: string; category?: string; store_token?: string }): Promise<{ items: any[] }> => {
   return api.get('/admin/plugins/store', { params })
 }
 
@@ -854,14 +854,77 @@ export const installFromStore = (pluginId: string, licenseKey?: string): Promise
   return api.post('/admin/plugins/store/install', null, { params: { plugin_id: pluginId, license_key: licenseKey || '' } })
 }
 
-export const purchasePlugin = (pluginId: string, buyerEmail?: string): Promise<{
+export const purchasePlugin = (pluginId: string, storeToken: string): Promise<{
   success: boolean
   message: string
-  license_key?: string
-  order_no?: string
   plugin_name?: string
   price?: number
-  rebind_limit?: number
+  require_payment?: boolean
+  plugin_id?: string
+  gateways?: Array<{ name: string; display_name: string }>
 }> => {
-  return api.post('/admin/plugins/store/purchase', { plugin_id: pluginId, buyer_email: buyerEmail || '' })
+  return api.post('/admin/plugins/store/purchase', { plugin_id: pluginId, store_token: storeToken })
+}
+
+/** Store 账号登录 */
+export const storeLogin = (account: string, password: string): Promise<{
+  success: boolean
+  message?: string
+  access_token?: string
+  refresh_token?: string
+  user?: any
+}> => {
+  return api.post('/admin/plugins/store/login', { account, password })
+}
+
+/** Store 账号注册 */
+export const storeRegister = (username: string, email: string, password: string): Promise<{
+  success: boolean
+  message?: string
+  access_token?: string
+  refresh_token?: string
+  user?: any
+}> => {
+  return api.post('/admin/plugins/store/register', { username, email, password })
+}
+
+/** 获取用户在商店已购买的插件 */
+export const getMyStorePlugins = (storeToken: string): Promise<{ items: any[] }> => {
+  return api.get('/admin/plugins/store/my-plugins', { params: { store_token: storeToken } })
+}
+
+/** 创建支付订单（付费插件） */
+export const createPaymentOrder = (params: {
+  plugin_id: string
+  store_token: string
+  gateway?: string
+  pay_type?: string
+}): Promise<{
+  success: boolean
+  order_no?: string
+  payment_url?: string
+  message?: string
+  amount?: number
+}> => {
+  return api.post('/admin/plugins/store/pay/create-order', params)
+}
+
+/** 查询支付订单状态 */
+export const queryPaymentStatus = (orderNo: string, storeToken: string): Promise<{
+  order_no: string
+  plugin_id: string
+  plugin_name: string
+  amount: number
+  status: string
+  trade_no?: string
+  paid_at?: string
+}> => {
+  return api.get('/admin/plugins/store/pay/status', { params: { order_no: orderNo, store_token: storeToken } })
+}
+
+/** 获取可用支付网关列表 */
+export const getPaymentGateways = (): Promise<{
+  gateways: Array<{ name: string; display_name: string }>
+}> => {
+  return api.get('/admin/plugins/store/pay/gateways')
 }

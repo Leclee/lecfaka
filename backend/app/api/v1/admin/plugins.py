@@ -17,18 +17,46 @@ from ....database import get_db
 from ....api.deps import get_current_admin
 from ....models.plugin import Plugin
 from ....plugins import plugin_manager
-from ....plugins.license_client import verify_license, get_store_plugins, download_plugin, check_updates, purchase_plugin, APP_VERSION
+from ....plugins.license_client import (
+    verify_domain, get_store_plugins, download_plugin, check_updates,
+    purchase_plugin, store_login, store_register, get_my_plugins,
+    create_payment_order, query_payment_status, get_payment_gateways,
+    APP_VERSION,
+)
 from ....utils.request import get_base_url
 
 router = APIRouter()
 
 
-# ============== 版本检查 + 商店代理（必须在 /{plugin_id} 路由之前注册） ==============
+# ============== Store 账号代理 API ==============
+
+class StoreLoginBody(BaseModel):
+    account: str
+    password: str
+
+
+class StoreRegisterBody(BaseModel):
+    username: str
+    email: str
+    password: str
+
+
+@router.post("/store/login")
+async def proxy_store_login(body: StoreLoginBody, admin=Depends(get_current_admin)):
+    """代理登录 Store 账号"""
+    return await store_login(body.account, body.password)
+
+
+@router.post("/store/register")
+async def proxy_store_register(body: StoreRegisterBody, admin=Depends(get_current_admin)):
+    """代理注册 Store 账号"""
+    return await store_register(body.username, body.email, body.password)
+
+
+# ============== 版本检查 + 商店代理 ==============
 
 @router.get("/check-updates")
-async def get_updates(
-    admin=Depends(get_current_admin),
-):
+async def get_updates(admin=Depends(get_current_admin)):
     """检查主程序和已安装插件的更新"""
     installed = {}
     for pi in plugin_manager.get_all_plugins():
@@ -43,15 +71,16 @@ async def proxy_store(
     type: Optional[str] = Query(None),
     keyword: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
+    store_token: Optional[str] = Query(None),
     admin=Depends(get_current_admin),
 ):
-    """代理获取插件商店列表"""
-    return await get_store_plugins(type=type, keyword=keyword, category=category)
+    """代理获取插件商店列表（传入 store_token 可标记已购状态）"""
+    return await get_store_plugins(type=type, keyword=keyword, category=category, store_token=store_token)
 
 
 class PurchaseBody(BaseModel):
     plugin_id: str
-    buyer_email: str = ""
+    store_token: str = ""
 
 
 @router.post("/store/purchase")
@@ -61,16 +90,63 @@ async def purchase_from_store(
     admin=Depends(get_current_admin),
 ):
     """
-    购买插件 → 自动生成授权码 → 返回给前端显示。
-    域名从当前请求的 Host 自动获取。
+    通过 Store 账号购买插件（免费插件直接购买）。
+
+    付费插件会返回 require_payment=True，前端需要走支付流程。
     """
-    domain = get_base_url(request).replace("https://", "").replace("http://", "").split("/")[0]
-    result = await purchase_plugin(
+    return await purchase_plugin(
         plugin_id=body.plugin_id,
-        buyer_email=body.buyer_email,
-        domain=domain,
+        store_token=body.store_token,
     )
-    return result
+
+
+# ============== 支付代理 API ==============
+
+class CreatePaymentBody(BaseModel):
+    plugin_id: str
+    store_token: str
+    gateway: str = "epay"
+    pay_type: str = "alipay"
+
+
+@router.post("/store/pay/create-order")
+async def proxy_create_payment(body: CreatePaymentBody, admin=Depends(get_current_admin)):
+    """代理创建支付订单 → 返回支付链接"""
+    return await create_payment_order(
+        plugin_id=body.plugin_id,
+        store_token=body.store_token,
+        gateway=body.gateway,
+        pay_type=body.pay_type,
+    )
+
+
+@router.get("/store/pay/status")
+async def proxy_payment_status(
+    order_no: str = Query(...),
+    store_token: str = Query(""),
+    admin=Depends(get_current_admin),
+):
+    """代理查询支付订单状态"""
+    if not store_token:
+        return {"success": False, "message": "请先登录 Store 账号"}
+    return await query_payment_status(order_no, store_token)
+
+
+@router.get("/store/pay/gateways")
+async def proxy_payment_gateways(admin=Depends(get_current_admin)):
+    """代理获取可用支付网关列表"""
+    return await get_payment_gateways()
+
+
+@router.get("/store/my-plugins")
+async def proxy_my_plugins(
+    store_token: str = Query(""),
+    admin=Depends(get_current_admin),
+):
+    """代理获取用户在商店已购买的插件"""
+    if not store_token:
+        return {"items": [], "message": "请先登录 Store 账号"}
+    return await get_my_plugins(store_token)
 
 
 @router.post("/store/install")
@@ -85,7 +161,6 @@ async def install_from_store(
     if not data:
         return {"message": "插件下载失败"}
 
-    # 保存为临时 zip 并安装
     with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
         tmp.write(data)
         tmp_path = tmp.name
@@ -117,7 +192,6 @@ async def get_plugins(
     
     items = []
     for pi in plugins:
-        # 获取数据库中的额外信息
         result = await db.execute(
             select(Plugin).where(Plugin.plugin_id == pi.meta.id)
         )
@@ -244,19 +318,16 @@ async def install_plugin(
     if not file.filename or not file.filename.endswith(".zip"):
         return {"message": "请上传 .zip 格式的插件包"}
 
-    # 保存临时文件
     with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
         content = await file.read()
         tmp.write(content)
         tmp_path = tmp.name
 
     try:
-        # 解压到 installed/ 目录
         plugins_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "plugins", "installed")
         os.makedirs(plugins_dir, exist_ok=True)
 
         with zipfile.ZipFile(tmp_path, "r") as z:
-            # 检查 plugin.json 是否存在
             names = z.namelist()
             plugin_json_path = None
             for n in names:
@@ -267,20 +338,16 @@ async def install_plugin(
             if not plugin_json_path:
                 return {"message": "插件包中缺少 plugin.json"}
 
-            # 读取 plugin.json
             meta = json.loads(z.read(plugin_json_path))
             plugin_id = meta.get("id", "")
             if not plugin_id:
                 return {"message": "plugin.json 中缺少 id 字段"}
 
-            # 解压到以 plugin_id 命名的目录
             target_dir = os.path.join(plugins_dir, plugin_id)
             if os.path.exists(target_dir):
                 shutil.rmtree(target_dir)
 
-            # 解压（处理嵌套目录）
             z.extractall(plugins_dir)
-            # 如果解压出来是一个子目录，重命名
             extracted = os.path.dirname(plugin_json_path)
             if extracted and extracted != plugin_id:
                 src = os.path.join(plugins_dir, extracted)
@@ -307,16 +374,13 @@ async def uninstall_plugin(
     if pi.is_builtin:
         return {"message": "内置插件不可卸载"}
 
-    # 禁用
     await plugin_manager.disable_plugin(plugin_id, db)
 
-    # 删除文件
     plugins_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "plugins", "installed")
     target_dir = os.path.join(plugins_dir, plugin_id)
     if os.path.exists(target_dir):
         shutil.rmtree(target_dir)
 
-    # 删除数据库记录
     result = await db.execute(select(Plugin).where(Plugin.plugin_id == plugin_id))
     db_plugin = result.scalar_one_or_none()
     if db_plugin:
@@ -339,17 +403,14 @@ async def activate_license(
     db: AsyncSession = Depends(get_db),
     admin=Depends(get_current_admin),
 ):
-    """激活授权码"""
-    # 获取当前域名
+    """激活授权（兼容旧版授权码，新版通过域名验证）"""
     domain = "localhost"
     if request:
         domain = request.headers.get("x-forwarded-host", request.headers.get("host", "localhost"))
 
-    # 向 store 服务器验证
-    result = await verify_license(plugin_id, req.license_key, domain)
+    result = await verify_domain(plugin_id, domain)
 
     if result.get("valid"):
-        # 更新数据库
         db_result = await db.execute(select(Plugin).where(Plugin.plugin_id == plugin_id))
         db_plugin = db_result.scalar_one_or_none()
         if db_plugin:
@@ -359,6 +420,4 @@ async def activate_license(
 
         return {"message": "授权激活成功", "expires_at": result.get("expires_at")}
     else:
-        return {"message": result.get("message", "授权验证失败")}
-
-
+        return {"message": result.get("message", result.get("error", "授权验证失败"))}

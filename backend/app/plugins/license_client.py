@@ -1,7 +1,8 @@
 """
 授权客户端 - 与远程插件商店 (lecfaka-store) 通信
 
-商店是独立部署的中心化服务，所有发卡网实例通过 STORE_URL 远程连接。
+v2.0: 改为用户系统 + 域名验证，不再使用授权码。
+v2.1: 集成支付流程（创建支付订单、查询支付状态）。
 """
 
 import logging
@@ -12,35 +13,45 @@ from ..config import settings
 
 logger = logging.getLogger("plugins.store_client")
 
-# 主程序版本号（用于更新检查）
+## 主程序版本号（用于更新检查）
 APP_VERSION = "1.0.0"
 
 STORE_URL = getattr(settings, "store_url", None) or "https://plugins.leclee.top"
 
 
-async def verify_license(plugin_id: str, license_key: str, domain: str) -> Dict[str, Any]:
-    """向 store 服务器验证授权"""
+async def verify_domain(plugin_id: str, domain: str) -> Dict[str, Any]:
+    """
+    向 store 验证域名是否有权使用某插件。
+
+    新版本不再需要授权码，直接用 plugin_id + domain 验证。
+    """
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
                 f"{STORE_URL}/api/v1/license/verify",
-                json={
-                    "plugin_id": plugin_id,
-                    "license_key": license_key,
-                    "domain": domain,
-                },
+                json={"plugin_id": plugin_id, "domain": domain},
             )
             return resp.json()
     except Exception as e:
         return {"valid": False, "message": f"授权服务器连接失败: {e}"}
 
 
+async def verify_license(plugin_id: str, license_key: str, domain: str) -> Dict[str, Any]:
+    """[兼容旧版] 向 store 服务器验证授权 — 内部转为域名验证"""
+    return await verify_domain(plugin_id, domain)
+
+
 async def get_store_plugins(
     type: Optional[str] = None,
     keyword: Optional[str] = None,
     category: Optional[str] = None,
+    store_token: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """从 store 获取插件列表"""
+    """
+    从 store 获取插件列表。
+
+    如果提供了 store_token，会传递给 Store 以标记已购买状态。
+    """
     try:
         params = {}
         if type:
@@ -50,10 +61,15 @@ async def get_store_plugins(
         if category:
             params["category"] = category
 
+        headers = {}
+        if store_token:
+            headers["Authorization"] = f"Bearer {store_token}"
+
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
                 f"{STORE_URL}/api/v1/store/plugins",
                 params=params,
+                headers=headers,
             )
             return resp.json()
     except Exception as e:
@@ -76,87 +92,147 @@ async def download_plugin(plugin_id: str, license_key: str = "") -> Optional[byt
 
 
 async def check_updates(installed_plugins: Dict[str, str]) -> Dict[str, Any]:
-    """
-    向商店检查主程序和插件更新。
-
-    Args:
-        installed_plugins: {"plugin_id": "version", ...}
-
-    Returns:
-        {
-            "plugin_updates": [{"id", "name", "current_version", "latest_version"}, ...],
-            "app_update": {"latest_version", "current_version", "message"} or None,
-        }
-    """
+    """向商店检查主程序和插件更新"""
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
                 f"{STORE_URL}/api/v1/store/check-updates",
-                json={
-                    "plugins": installed_plugins,
-                    "app_version": APP_VERSION,
-                },
+                json={"plugins": installed_plugins, "app_version": APP_VERSION},
             )
-            data = resp.json()
-            updates = data.get("plugin_updates", [])
-            app_update = data.get("app_update")
-            if updates:
-                logger.info(f"Available plugin updates: {[u['id'] for u in updates]}")
-            if app_update:
-                logger.info(f"App update available: {app_update['latest_version']}")
-            return data
+            return resp.json()
     except Exception as e:
         logger.debug(f"Update check failed: {e}")
         return {"plugin_updates": [], "app_update": None}
 
 
-async def rebind_license(license_key: str, new_domain: str) -> Dict[str, Any]:
-    """向 store 服务器请求换绑域名"""
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                f"{STORE_URL}/api/v1/license/rebind",
-                json={
-                    "license_key": license_key,
-                    "new_domain": new_domain,
-                },
-            )
-            return resp.json()
-    except Exception as e:
-        return {"success": False, "message": f"授权服务器连接失败: {e}"}
-
-
-async def get_license_info(license_key: str) -> Dict[str, Any]:
-    """向 store 查询授权码的绑定状态"""
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                f"{STORE_URL}/api/v1/license/info",
-                json={"license_key": license_key},
-            )
-            return resp.json()
-    except Exception as e:
-        return {"found": False, "message": f"授权服务器连接失败: {e}"}
-
-
-async def purchase_plugin(plugin_id: str, buyer_email: str = "", domain: str = "") -> Dict[str, Any]:
+async def purchase_plugin(
+    plugin_id: str,
+    store_token: str = "",
+    domain: str = "",
+) -> Dict[str, Any]:
     """
-    向 store 服务器购买插件，自动生成授权码。
+    通过 Store 用户 token 购买插件。
 
-    Returns:
-        成功: {"success": True, "license_key": "LF-XXXX-...", "order_no": "ORD-...", ...}
-        失败: {"success": False, "message": "..."}
+    - 免费插件：直接购买
+    - 付费插件：返回 require_payment=True 提示前端走支付流程
     """
     try:
+        headers = {}
+        if store_token:
+            headers["Authorization"] = f"Bearer {store_token}"
+
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
                 f"{STORE_URL}/api/v1/store/purchase",
+                json={"plugin_id": plugin_id},
+                headers=headers,
+            )
+            data = resp.json()
+            if resp.status_code >= 400:
+                return {"success": False, "message": data.get("detail", "购买失败")}
+            return data
+    except Exception as e:
+        return {"success": False, "message": f"商店连接失败: {e}"}
+
+
+async def create_payment_order(
+    plugin_id: str,
+    store_token: str,
+    gateway: str = "epay",
+    pay_type: str = "alipay",
+) -> Dict[str, Any]:
+    """
+    创建支付订单（付费插件）
+
+    调用 Store 的支付 API，返回支付链接给前端跳转。
+    """
+    try:
+        headers = {"Authorization": f"Bearer {store_token}"}
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{STORE_URL}/api/v1/pay/create-order",
                 json={
                     "plugin_id": plugin_id,
-                    "buyer_email": buyer_email,
-                    "domain": domain,
+                    "gateway": gateway,
+                    "pay_type": pay_type,
                 },
+                headers=headers,
+            )
+            data = resp.json()
+            if resp.status_code >= 400:
+                return {"success": False, "message": data.get("detail", "创建支付订单失败")}
+            return data
+    except Exception as e:
+        return {"success": False, "message": f"商店连接失败: {e}"}
+
+
+async def query_payment_status(order_no: str, store_token: str) -> Dict[str, Any]:
+    """查询支付订单状态"""
+    try:
+        headers = {"Authorization": f"Bearer {store_token}"}
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"{STORE_URL}/api/v1/pay/status/{order_no}",
+                headers=headers,
+            )
+            data = resp.json()
+            if resp.status_code >= 400:
+                return {"success": False, "message": data.get("detail", "查询失败")}
+            return data
+    except Exception as e:
+        return {"success": False, "message": f"查询失败: {e}"}
+
+
+async def get_payment_gateways() -> Dict[str, Any]:
+    """获取可用的支付网关列表"""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(f"{STORE_URL}/api/v1/pay/gateways")
+            return resp.json()
+    except Exception as e:
+        return {"gateways": []}
+
+
+async def store_login(account: str, password: str) -> Dict[str, Any]:
+    """登录 Store 账号，获取 JWT token"""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{STORE_URL}/api/v1/auth/login",
+                json={"account": account, "password": password},
+            )
+            data = resp.json()
+            if resp.status_code >= 400:
+                return {"success": False, "message": data.get("detail", "登录失败")}
+            return {"success": True, **data}
+    except Exception as e:
+        return {"success": False, "message": f"商店连接失败: {e}"}
+
+
+async def store_register(username: str, email: str, password: str) -> Dict[str, Any]:
+    """注册 Store 账号"""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{STORE_URL}/api/v1/auth/register",
+                json={"username": username, "email": email, "password": password},
+            )
+            data = resp.json()
+            if resp.status_code >= 400:
+                return {"success": False, "message": data.get("detail", "注册失败")}
+            return {"success": True, **data}
+    except Exception as e:
+        return {"success": False, "message": f"商店连接失败: {e}"}
+
+
+async def get_my_plugins(store_token: str) -> Dict[str, Any]:
+    """获取用户在商店购买的插件列表"""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"{STORE_URL}/api/v1/store/my-plugins",
+                headers={"Authorization": f"Bearer {store_token}"},
             )
             return resp.json()
     except Exception as e:
-        return {"success": False, "message": f"商店连接失败: {e}"}
+        return {"items": [], "error": f"商店连接失败: {e}"}
