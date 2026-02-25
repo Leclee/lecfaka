@@ -10,7 +10,7 @@
 - **安全可靠** - JWT 认证、密码加密、支付签名验证
 - **响应式设计** - 完美支持 PC 和移动端
 - **域名自动检测** - 无需手动配置域名，Nginx 反代自动识别
-- **插件系统** - 支付方式、通知等均可通过插件扩展
+- **插件系统** - 支付方式、主题、通知、发货均可通过插件扩展
 - **完整电商功能** - 商品管理、卡密管理、订单系统、优惠券
 - **分销系统** - 推广返佣
 - **分站系统** - 支持商户开店
@@ -47,8 +47,9 @@ lecfaka/
 │   ├── Dockerfile.backend
 │   ├── Dockerfile.frontend
 │   └── nginx.conf
-├── docs/                   # 文档
-│   └── Docker部署指南.md
+├── deploy/                 # 部署文档与脚本
+│   └── README.md          # 完整部署指南
+├── docs/                   # 开发文档
 ├── docker-compose.yml      # Docker Compose（dev/prod 统一）
 └── .env.example            # 环境变量模板
 ```
@@ -69,12 +70,10 @@ cp .env.example .env
 # 3. 一键启动
 docker compose --profile prod up -d
 
-# 4. 访问
-# 前端: http://你的IP
-# 默认管理员: admin / admin123
+# 4. 访问 http://你的IP，完成安装向导（创建管理员账号）
 ```
 
-> 详细部署说明请参阅 [Docker 部署指南](docs/Docker部署指南.md)
+> 详细部署说明请参阅 [部署指南](deploy/README.md)
 
 ### 方式二：本地开发
 
@@ -84,7 +83,6 @@ docker compose --profile dev up -d
 
 # 2. 启动后端
 cd backend
-cp ../.env.example .env   # 或使用已有的 .env
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 6666
 
@@ -100,21 +98,19 @@ npm run dev
 | 后端 API | http://localhost:6666 |
 | API 文档 | http://localhost:6666/docs |
 | Adminer | http://localhost:8080 |
-| 默认管理员 | admin / admin123 |
 
 ## 环境变量
 
 项目只需一个 `.env` 文件（从 `.env.example` 复制），核心配置项：
 
 | 变量 | 说明 | 必须修改 |
-|------|------|---------|
+|------|------|---------| 
 | `SECRET_KEY` | 应用加密密钥（加密 session 等） | 是 |
 | `JWT_SECRET_KEY` | JWT 签名密钥（用户登录 token） | 是 |
 | `DB_PASSWORD` | 数据库密码 | 是 |
-| `ADMIN_USERNAME` | 默认管理员用户名 | 否（默认 admin） |
-| `ADMIN_PASSWORD` | 默认管理员密码 | 建议修改 |
 
-> 支付配置、邮件配置、短信配置等均在**管理后台网页中设置**，无需写入环境变量。
+> **管理员账号**通过首次访问网站时的**安装向导**创建，无需在环境变量中配置。
+> 支付配置、邮件配置等均在**管理后台网页中设置**，无需写入环境变量。
 
 ## 域名配置
 
@@ -123,7 +119,7 @@ npm run dev
 - **换域名**：只需修改 Nginx 的 `server_name` + DNS 解析，后端零修改
 - **加 HTTPS**：Nginx 配置 SSL 证书即可，后端通过 `X-Forwarded-Proto` 自动感知
 
-支持 Nginx + Certbot、Cloudflare 等方式，详见 [部署指南](docs/Docker部署指南.md#域名与-https-配置)。
+支持 Nginx + Certbot、Cloudflare 等方式，详见 [部署指南](deploy/README.md)。
 
 ## 许可证
 

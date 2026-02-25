@@ -68,6 +68,9 @@ frontend/dist/
 tmp/
 temp/
 *.tmp
+temp_*.json
+test_*.py
+fix_*.py
 
 # 操作系统
 .DS_Store
@@ -76,6 +79,6 @@ Thumbs.db
 # Docker
 docker-compose.override.yml
 
-# 忽略的目录
-python/
-shop.leclee.us.kg/
+# 调试残留
+*.zip
+!backend/uploads/**/*.zip

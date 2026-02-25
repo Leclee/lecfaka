@@ -3,6 +3,32 @@
 > 服务器: 83.229.127.33（宝塔面板）
 > 域名: shop.leclee.top + plugins.leclee.top
 
+## 架构说明
+
+LecFaka 包含两个**完全独立**的项目：
+
+| 项目 | 说明 |
+|------|------|
+| **lecfaka**（主项目） | 发卡网本体，含前端+后端+DB+Redis |
+| **lecfaka-store**（插件商店） | 插件分发、授权验证、版本更新 |
+
+```
+服务器
+├─ lecfaka (Docker Compose)
+│  ├─ Frontend :8888 (Nginx 反代)
+│  ├─ Backend  :8000 (内部)
+│  ├─ PostgreSQL :5432 (仅本机)
+│  └─ Redis    :6379 (仅本机)
+│
+├─ lecfaka-store (Docker Compose)
+│  ├─ Store API :8001 (Nginx 反代)
+│  └─ PostgreSQL :5433 (仅本机)
+│
+└─ 宝塔 Nginx :80/443
+   ├─ shop.leclee.top    → 127.0.0.1:8888
+   └─ plugins.leclee.top → 127.0.0.1:8001
+```
+
 ## 部署顺序
 
 1. 先部署插件商店（plugins.leclee.top）
@@ -86,6 +112,8 @@ curl http://127.0.0.1:8888/health
 # 应返回 {"status":"ok","app":"LecFaka"}
 ```
 
+> **管理员账号**：首次访问 `http://IP:8888/install` 通过安装向导创建，无需在 `.env` 中配置。
+
 ## 第五步：配置宝塔 Nginx
 
 ### 方法 A：通过宝塔面板网页操作
@@ -99,34 +127,25 @@ curl http://127.0.0.1:8888/health
 ### 方法 B：命令行直接操作
 
 ```bash
-# 复制 Nginx 配置（假设已将 deploy/ 目录上传到服务器）
+# 复制 Nginx 配置
 cp /opt/lecfaka/deploy/nginx-shop.leclee.top.conf \
    /www/server/panel/vhost/nginx/shop.leclee.top.conf
 
 cp /opt/lecfaka/deploy/nginx-plugins.leclee.top.conf \
    /www/server/panel/vhost/nginx/plugins.leclee.top.conf
 
-# 创建证书验证目录的 well-known 配置（如果不存在）
-touch /www/server/panel/vhost/nginx/well-known/shop.leclee.top.conf
-touch /www/server/panel/vhost/nginx/well-known/plugins.leclee.top.conf
-
-# 创建日志目录
+# 创建日志文件
 touch /www/wwwlogs/shop.leclee.top.log
 touch /www/wwwlogs/shop.leclee.top.error.log
 touch /www/wwwlogs/plugins.leclee.top.log
 touch /www/wwwlogs/plugins.leclee.top.error.log
 
-# 测试 Nginx 配置
+# 测试并重载
 nginx -t
-
-# 重载
 nginx -s reload
 ```
 
 ### SSL 证书
-
-如果证书路径与配置文件中不一致，需要修改 Nginx 配置中的路径。
-宝塔面板的证书一般存放在 `/www/server/panel/vhost/cert/域名/` 目录下。
 
 在宝塔面板中操作：网站 → 对应站点 → SSL → 申请或上传证书。
 
@@ -146,6 +165,35 @@ curl https://plugins.leclee.top/api/v1/store/plugins
 ```
 
 浏览器访问 https://shop.leclee.top/install 完成安装向导（创建管理员账号）。
+
+---
+
+## 环境变量参考
+
+### 主项目 (.env)
+
+| 变量 | 必须 | 默认值 | 说明 |
+|------|------|--------|------|
+| `SECRET_KEY` | **是** | - | 应用加密密钥 |
+| `JWT_SECRET_KEY` | **是** | - | JWT 签名密钥 |
+| `DB_USER` | 否 | `lecfaka` | 数据库用户名 |
+| `DB_PASSWORD` | **是** | `lecfaka123` | 数据库密码 |
+| `DB_NAME` | 否 | `lecfaka` | 数据库名 |
+| `HTTP_PORT` | 否 | `80` | 前端 HTTP 端口 |
+| `STORE_URL` | 否 | `https://plugins.leclee.top` | 插件商店地址 |
+
+> 管理员账号通过安装向导创建。支付方式在管理后台网页中配置。
+
+### 插件商店 (.env)
+
+| 变量 | 必须 | 默认值 | 说明 |
+|------|------|--------|------|
+| `DATABASE_URL` | **是** | - | 数据库连接串 |
+| `SECRET_KEY` | **是** | - | JWT 密钥 |
+| `DB_USER` | 否 | `lecfaka` | 数据库用户名 |
+| `DB_PASSWORD` | **是** | - | 数据库密码 |
+| `DEBUG` | 否 | `true` | 调试模式 |
+| `EPAY_URL` / `EPAY_PID` / `EPAY_KEY` | 否 | - | 易支付配置 |
 
 ---
 
@@ -183,4 +231,21 @@ cd /opt/lecfaka-store && git pull && docker compose build && docker compose up -
 # 备份
 cd /opt/lecfaka && docker compose exec -T db pg_dump -U lecfaka lecfaka > ~/backup_main_$(date +%Y%m%d).sql
 cd /opt/lecfaka-store && docker compose exec -T db pg_dump -U lecfaka lecfaka_store > ~/backup_store_$(date +%Y%m%d).sql
+
+# 完全清除重新部署（⚠️ 会删除所有数据！请先备份）
+cd /opt/lecfaka && docker compose --profile prod down -v && docker compose --profile prod up -d --build
 ```
+
+## 域名配置
+
+系统采用**自动检测方案**，从 Nginx 转发的 HTTP 请求头自动获取域名和协议。
+
+- **换域名**：只需修改 Nginx 的 `server_name` + DNS 解析，后端零修改
+- **加 HTTPS**：Nginx 配置 SSL 证书即可，后端通过 `X-Forwarded-Proto` 自动感知
+
+### Cloudflare 方案
+
+1. Cloudflare 添加 A 记录 → 服务器 IP
+2. 开启代理（橙色云朵）
+3. SSL 设为 "Full"
+4. Docker 直接暴露 80 端口即可
