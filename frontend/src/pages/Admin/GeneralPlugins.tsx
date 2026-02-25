@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Table, Button, Tag, Card, Typography, message, Switch, Space,
-  Modal, Form, Input, Popconfirm, Upload, Tabs
+  Modal, Form, Input, Popconfirm, Upload, Tabs, Select
 } from 'antd'
 import { AppstoreAddOutlined, SettingOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
@@ -188,13 +188,29 @@ export default function GeneralPlugins() {
             <Form.Item
               key={key}
               name={key}
-              label={schema.label || key}
+              label={
+                <span>
+                  {schema.label || key}
+                  {schema.description && (
+                    <span style={{ color: '#999', fontSize: 12, marginLeft: 8 }}>{schema.description}</span>
+                  )}
+                </span>
+              }
+              valuePropName={schema.type === 'switch' || schema.type === 'boolean' ? 'checked' : 'value'}
               rules={schema.required ? [{ required: true, message: `请输入${schema.label || key}` }] : []}
             >
-              {schema.type === 'boolean' ? (
+              {schema.type === 'textarea' ? (
+                <Input.TextArea rows={4} placeholder={schema.placeholder} />
+              ) : schema.type === 'switch' || schema.type === 'boolean' ? (
                 <Switch />
-              ) : schema.type === 'textarea' ? (
-                <Input.TextArea rows={3} placeholder={schema.placeholder} />
+              ) : schema.type === 'select' && schema.options ? (
+                <Select placeholder={`请选择${schema.label || key}`}>
+                  {schema.options.map((opt: any) => (
+                    <Select.Option key={opt.value} value={opt.value}>{opt.label}</Select.Option>
+                  ))}
+                </Select>
+              ) : schema.type === 'color' ? (
+                <Input type="color" style={{ width: 80, height: 32, padding: 2 }} />
               ) : (
                 <Input placeholder={schema.placeholder} type={schema.encrypted ? 'password' : 'text'} />
               )}
