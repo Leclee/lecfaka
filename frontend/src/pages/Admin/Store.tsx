@@ -11,6 +11,7 @@ export default function Store() {
   const [keyword, setKeyword] = useState('')
   const [activeTab, setActiveTab] = useState('all')
   const [purchasing, setPurchasing] = useState(false)
+  const [installing, setInstalling] = useState<string>('')  // 正在安装的插件 ID
 
   /** Store 账号状态 */
   const [storeToken, setStoreToken] = useState<string>(localStorage.getItem('store_token') || '')
@@ -165,11 +166,19 @@ export default function Store() {
   /** 购买插件 */
   const handlePurchase = async (pluginId: string, pluginName: string, isFree: boolean, price: number) => {
     if (isFree) {
+      setInstalling(pluginId)
       try {
-        const res = await adminApi.installFromStore(pluginId)
-        message.success(res.message)
+        const res = await adminApi.installFromStore(pluginId, '', storeToken)
+        if (res.success === false) {
+          message.error(res.message || '安装失败')
+        } else {
+          message.success(res.message || '安装成功')
+          loadData()
+        }
       } catch (e: any) {
         message.error(e.message || '安装失败')
+      } finally {
+        setInstalling('')
       }
       return
     }
@@ -214,11 +223,19 @@ export default function Store() {
   }
 
   const handleInstall = async (pluginId: string) => {
+    setInstalling(pluginId)
     try {
-      const res = await adminApi.installFromStore(pluginId, storeToken)
-      message.success(res.message)
+      const res = await adminApi.installFromStore(pluginId, '', storeToken)
+      if (res.success === false) {
+        message.error(res.message || '安装失败')
+      } else {
+        message.success(res.message || '安装成功')
+        loadData()
+      }
     } catch (e: any) {
       message.error(e.message || '安装失败')
+    } finally {
+      setInstalling('')
     }
   }
 
@@ -321,6 +338,7 @@ export default function Store() {
               type="primary"
               size="small"
               icon={<ShoppingCartOutlined />}
+              loading={installing === r.id}
               onClick={() => handleInstall(r.id)}
             >
               安装
@@ -332,7 +350,7 @@ export default function Store() {
             type="primary"
             size="small"
             icon={r.is_free ? <ShoppingCartOutlined /> : <CreditCardOutlined />}
-            loading={purchasing}
+            loading={purchasing || installing === r.id}
             onClick={() => handlePurchase(r.id, r.name, r.is_free, r.price)}
           >
             {r.is_free ? '安装' : '立即购买'}

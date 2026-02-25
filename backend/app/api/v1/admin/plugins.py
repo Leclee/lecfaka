@@ -153,30 +153,105 @@ async def proxy_my_plugins(
 async def install_from_store(
     plugin_id: str = Query(...),
     license_key: str = Query(""),
+    store_token: str = Query(""),
     db: AsyncSession = Depends(get_db),
     admin=Depends(get_current_admin),
 ):
     """从商店一键安装插件"""
-    data, error = await download_plugin(plugin_id, license_key)
-    if not data:
-        return {"message": f"插件下载失败: {error or '未知原因'}"}
+    import logging
+    logger = logging.getLogger("plugins.store_install")
 
+    logger.info(f"[store_install] 开始安装插件: {plugin_id}, has_store_token={bool(store_token)}, has_license_key={bool(license_key)}")
+
+    ## 1. 从商店下载插件 zip（优先使用 store_token 认证）
+    data, error = await download_plugin(plugin_id, license_key, store_token=store_token)
+    if not data:
+        logger.error(f"[store_install] 下载失败: {error}")
+        return {"message": f"插件下载失败: {error or '未知原因'}", "success": False}
+
+    logger.info(f"[store_install] 下载完成，大小: {len(data)} bytes")
+
+    ## 2. 写入临时文件
     with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
         tmp.write(data)
         tmp_path = tmp.name
 
     try:
+        ## 3. 确定安装目录
         plugins_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "plugins", "installed")
         os.makedirs(plugins_dir, exist_ok=True)
+        logger.info(f"[store_install] 安装目录: {plugins_dir}")
 
+        ## 4. 验证 zip 并解析 plugin.json
         with zipfile.ZipFile(tmp_path, "r") as z:
+            names = z.namelist()
+            logger.info(f"[store_install] zip 内文件列表: {names[:20]}")
+
+            ## 查找 plugin.json
+            plugin_json_path = None
+            for n in names:
+                if n.endswith("plugin.json"):
+                    plugin_json_path = n
+                    break
+
+            if not plugin_json_path:
+                logger.error("[store_install] zip 中没有 plugin.json")
+                return {"message": "插件包中缺少 plugin.json，请联系插件开发者", "success": False}
+
+            ## 读取 plugin.json 获取实际 plugin_id
+            meta = json.loads(z.read(plugin_json_path))
+            actual_plugin_id = meta.get("id", "")
+            if not actual_plugin_id:
+                logger.error("[store_install] plugin.json 中缺少 id 字段")
+                return {"message": "plugin.json 中缺少 id 字段", "success": False}
+
+            logger.info(f"[store_install] 解析到 plugin_id={actual_plugin_id}, version={meta.get('version', '?')}")
+
+            ## 5. 清理已有目录（覆盖安装）
+            target_dir = os.path.join(plugins_dir, actual_plugin_id)
+            if os.path.exists(target_dir):
+                logger.info(f"[store_install] 已存在同名目录，先删除: {target_dir}")
+                shutil.rmtree(target_dir)
+
+            ## 6. 解压
             z.extractall(plugins_dir)
 
-        return {"message": f"插件 {plugin_id} 安装成功，请重启服务生效"}
+            ## 7. 处理解压后目录名不一致的情况
+            extracted = os.path.dirname(plugin_json_path)
+            if extracted and extracted != actual_plugin_id:
+                src = os.path.join(plugins_dir, extracted)
+                if os.path.exists(src):
+                    if os.path.exists(target_dir):
+                        shutil.rmtree(target_dir)
+                    os.rename(src, target_dir)
+                    logger.info(f"[store_install] 重命名目录: {extracted} -> {actual_plugin_id}")
+
+        ## 8. 验证安装结果
+        final_plugin_json = os.path.join(plugins_dir, actual_plugin_id, "plugin.json")
+        if not os.path.exists(final_plugin_json):
+            ## 尝试查找一级子目录
+            for item in os.listdir(plugins_dir):
+                candidate = os.path.join(plugins_dir, item, "plugin.json")
+                if os.path.exists(candidate):
+                    logger.info(f"[store_install] 在子目录找到 plugin.json: {item}")
+                    break
+            else:
+                logger.error(f"[store_install] 安装后找不到 plugin.json: {final_plugin_json}")
+                return {"message": f"安装异常：解压后找不到 plugin.json", "success": False}
+
+        logger.info(f"[store_install] 插件 {actual_plugin_id} 安装成功!")
+        return {"message": f"插件 {actual_plugin_id} 安装成功，请重启服务生效", "success": True, "plugin_id": actual_plugin_id}
+    except zipfile.BadZipFile:
+        logger.error("[store_install] 下载的文件不是有效的 zip 格式")
+        return {"message": "下载的文件不是有效的 zip 格式，请联系管理员", "success": False}
     except Exception as e:
-        return {"message": f"安装失败: {e}"}
+        logger.error(f"[store_install] 安装异常: {e}", exc_info=True)
+        return {"message": f"安装失败: {e}", "success": False}
     finally:
-        os.unlink(tmp_path)
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
 
 
 # ============== 插件列表 ==============

@@ -850,8 +850,8 @@ export const getStorePlugins = (params?: { type?: string; keyword?: string; cate
   return api.get('/admin/plugins/store', { params })
 }
 
-export const installFromStore = (pluginId: string, licenseKey?: string): Promise<{ message: string }> => {
-  return api.post('/admin/plugins/store/install', null, { params: { plugin_id: pluginId, license_key: licenseKey || '' } })
+export const installFromStore = (pluginId: string, licenseKey?: string, storeToken?: string): Promise<{ message: string; success?: boolean; plugin_id?: string }> => {
+  return api.post('/admin/plugins/store/install', null, { params: { plugin_id: pluginId, license_key: licenseKey || '', store_token: storeToken || '' } })
 }
 
 export const purchasePlugin = (pluginId: string, storeToken: string): Promise<{

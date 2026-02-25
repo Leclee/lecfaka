@@ -88,33 +88,54 @@ async def get_store_plugins(
         return {"items": [], "error": f"商店连接失败: {e}"}
 
 
-async def download_plugin(plugin_id: str, license_key: str = ""):
+async def download_plugin(plugin_id: str, license_key: str = "", store_token: str = ""):
     """
     从 store 下载插件 zip
 
-    返回 (bytes, None) 或 (None, error_msg)
+    @param plugin_id: 插件 ID
+    @param license_key: 旧版授权码（兼容）
+    @param store_token: Store 用户 JWT token（优先使用）
+    @return: (bytes, None) 成功时返回文件内容 | (None, error_msg) 失败时返回错误信息
     """
     try:
-        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=60) as client:
-            resp = await client.get(
-                f"{STORE_URL}/api/v1/store/download/{plugin_id}",
-                headers={"Authorization": f"Bearer {license_key}"} if license_key else {},
-            )
+        ## 构建认证 header：优先使用 store_token，其次使用 license_key
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        auth_token = store_token or license_key
+        if auth_token:
+            headers["Authorization"] = f"Bearer {auth_token}"
+
+        download_url = f"{STORE_URL}/api/v1/store/download/{plugin_id}"
+        logger.info(f"[download_plugin] 开始下载: {download_url}, has_token={bool(auth_token)}")
+
+        async with httpx.AsyncClient(timeout=120) as client:
+            resp = await client.get(download_url, headers=headers)
+
+            logger.info(f"[download_plugin] 响应状态: {resp.status_code}, content-type: {resp.headers.get('content-type', 'unknown')}, content-length: {len(resp.content)}")
+
             if resp.status_code == 200:
                 ct = resp.headers.get("content-type", "")
                 if "json" in ct:
-                    ## 服务端返回了 JSON 错误
-                    return None, resp.json().get("detail", "未知错误")
+                    ## 服务端返回了 JSON 错误（200 状态但 content-type 为 json）
+                    error_detail = resp.json().get("detail", "未知错误")
+                    logger.error(f"[download_plugin] 返回了 JSON 而非文件: {error_detail}")
+                    return None, error_detail
+                if len(resp.content) < 100:
+                    logger.error(f"[download_plugin] 下载文件过小 ({len(resp.content)} bytes)，可能不是有效的 zip")
+                    return None, f"下载的文件过小 ({len(resp.content)} bytes)，可能不是有效插件包"
+                logger.info(f"[download_plugin] 下载成功，文件大小: {len(resp.content)} bytes")
                 return resp.content, None
             ## 非 200
             try:
                 detail = resp.json().get("detail", resp.text[:200])
             except Exception:
                 detail = resp.text[:200]
-            logger.error(f"[download_plugin] status={resp.status_code}, detail={detail}")
+            logger.error(f"[download_plugin] 下载失败 status={resp.status_code}, detail={detail}")
             return None, f"商店返回 {resp.status_code}: {detail}"
+    except httpx.TimeoutException:
+        logger.error(f"[download_plugin] 下载超时: {plugin_id}")
+        return None, "下载超时，请稍后重试"
     except Exception as e:
-        logger.error(f"[download_plugin] exception: {e}")
+        logger.error(f"[download_plugin] 异常: {e}")
         return None, f"网络错误: {e}"
 
 
