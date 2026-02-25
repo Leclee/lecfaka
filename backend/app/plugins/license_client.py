@@ -135,7 +135,7 @@ async def download_plugin(plugin_id: str, license_key: str = "", store_token: st
                 ct = resp.headers.get("content-type", "")
                 if "json" in ct:
                     ## 服务端返回了 JSON 错误（200 状态但 content-type 为 json）
-                    error_detail = resp.json().get("detail", "未知错误")
+                    error_detail = _safe_json(resp).get("detail", "未知错误")
                     logger.error(f"[download_plugin] 返回了 JSON 而非文件: {error_detail}")
                     return None, error_detail
                 if len(resp.content) < 100:
@@ -145,7 +145,7 @@ async def download_plugin(plugin_id: str, license_key: str = "", store_token: st
                 return resp.content, None
             ## 非 200
             try:
-                detail = resp.json().get("detail", resp.text[:200])
+                detail = _safe_json(resp).get("detail", resp.text[:200])
             except Exception:
                 detail = resp.text[:200]
             logger.error(f"[download_plugin] 下载失败 status={resp.status_code}, detail={detail}")
@@ -166,7 +166,7 @@ async def check_updates(installed_plugins: Dict[str, str]) -> Dict[str, Any]:
             f"{STORE_URL}/api/v1/store/check-updates",
             json={"plugins": installed_plugins, "app_version": APP_VERSION},
         )
-        return resp.json()
+        return _safe_json(resp)
     except Exception as e:
         logger.debug(f"Update check failed: {e}")
         return {"plugin_updates": [], "app_update": None}
@@ -194,7 +194,7 @@ async def purchase_plugin(
             json={"plugin_id": plugin_id},
             headers=headers,
         )
-        data = resp.json()
+        data = _safe_json(resp)
         if resp.status_code >= 400:
             return {"success": False, "message": data.get("detail", "购买失败")}
         return data
@@ -225,7 +225,7 @@ async def create_payment_order(
             },
             headers=headers,
         )
-        data = resp.json()
+        data = _safe_json(resp)
         if resp.status_code >= 400:
             return {"success": False, "message": data.get("detail", "创建支付订单失败")}
         return data
@@ -242,7 +242,7 @@ async def query_payment_status(order_no: str, store_token: str) -> Dict[str, Any
             f"{STORE_URL}/api/v1/pay/status/{order_no}",
             headers=headers,
         )
-        data = resp.json()
+        data = _safe_json(resp)
         if resp.status_code >= 400:
             return {"success": False, "message": data.get("detail", "查询失败")}
         return data
