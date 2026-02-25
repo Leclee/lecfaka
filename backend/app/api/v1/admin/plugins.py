@@ -40,10 +40,11 @@ def _get_plugins_dir() -> str:
     """
     @brief 获取插件安装目录的绝对路径
     @return plugins/installed 的绝对路径
+
+    必须与 PluginManager._base_dir / "installed" 一致，
+    否则安装的插件重启后扫描不到。
     """
-    ## backend/app/api/v1/admin/plugins.py → parents[4] = backend/
-    backend_root = Path(__file__).resolve().parents[4]
-    plugins_dir = backend_root / "plugins" / "installed"
+    plugins_dir = plugin_manager._base_dir / "installed"
     plugins_dir.mkdir(parents=True, exist_ok=True)
     return str(plugins_dir)
 
