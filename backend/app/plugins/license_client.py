@@ -18,6 +18,24 @@ APP_VERSION = "1.0.0"
 
 STORE_URL = getattr(settings, "store_url", None) or "https://plugins.leclee.top"
 
+## 共享 HTTP 客户端（复用 TCP 连接，避免重复 DNS + TLS 握手）
+_http_client: Optional[httpx.AsyncClient] = None
+_DEFAULT_HEADERS = {"User-Agent": "Mozilla/5.0"}
+
+
+def _get_client(timeout: int = 15) -> httpx.AsyncClient:
+    """
+    @brief 获取共享的 httpx AsyncClient 实例
+    @details 使用模块级单例，复用底层连接池以提升性能
+    """
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(
+            headers=_DEFAULT_HEADERS,
+            timeout=timeout,
+        )
+    return _http_client
+
 
 def _safe_json(resp) -> Dict[str, Any]:
     """
@@ -38,12 +56,12 @@ async def verify_domain(plugin_id: str, domain: str) -> Dict[str, Any]:
     新版本不再需要授权码，直接用 plugin_id + domain 验证。
     """
     try:
-        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
-            resp = await client.post(
-                f"{STORE_URL}/api/v1/license/verify",
-                json={"plugin_id": plugin_id, "domain": domain},
-            )
-            return _safe_json(resp)
+        client = _get_client()
+        resp = await client.post(
+            f"{STORE_URL}/api/v1/license/verify",
+            json={"plugin_id": plugin_id, "domain": domain},
+        )
+        return _safe_json(resp)
     except Exception as e:
         return {"valid": False, "message": f"授权服务器连接失败: {e}"}
 
@@ -77,13 +95,13 @@ async def get_store_plugins(
         if store_token:
             headers["Authorization"] = f"Bearer {store_token}"
 
-        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
-            resp = await client.get(
-                f"{STORE_URL}/api/v1/store/plugins",
-                params=params,
-                headers=headers,
-            )
-            return _safe_json(resp)
+        client = _get_client()
+        resp = await client.get(
+            f"{STORE_URL}/api/v1/store/plugins",
+            params=params,
+            headers=headers,
+        )
+        return _safe_json(resp)
     except Exception as e:
         return {"items": [], "error": f"商店连接失败: {e}"}
 
@@ -107,8 +125,9 @@ async def download_plugin(plugin_id: str, license_key: str = "", store_token: st
         download_url = f"{STORE_URL}/api/v1/store/download/{plugin_id}"
         logger.info(f"[download_plugin] 开始下载: {download_url}, has_token={bool(auth_token)}")
 
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.get(download_url, headers=headers)
+        ## 下载使用独立客户端：超时 120s，避免影响共享连接池
+        async with httpx.AsyncClient(headers=_DEFAULT_HEADERS, timeout=120) as dl_client:
+            resp = await dl_client.get(download_url, headers=headers)
 
             logger.info(f"[download_plugin] 响应状态: {resp.status_code}, content-type: {resp.headers.get('content-type', 'unknown')}, content-length: {len(resp.content)}")
 
@@ -142,12 +161,12 @@ async def download_plugin(plugin_id: str, license_key: str = "", store_token: st
 async def check_updates(installed_plugins: Dict[str, str]) -> Dict[str, Any]:
     """向商店检查主程序和插件更新"""
     try:
-        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
-            resp = await client.post(
-                f"{STORE_URL}/api/v1/store/check-updates",
-                json={"plugins": installed_plugins, "app_version": APP_VERSION},
-            )
-            return resp.json()
+        client = _get_client()
+        resp = await client.post(
+            f"{STORE_URL}/api/v1/store/check-updates",
+            json={"plugins": installed_plugins, "app_version": APP_VERSION},
+        )
+        return resp.json()
     except Exception as e:
         logger.debug(f"Update check failed: {e}")
         return {"plugin_updates": [], "app_update": None}
@@ -169,16 +188,16 @@ async def purchase_plugin(
         if store_token:
             headers["Authorization"] = f"Bearer {store_token}"
 
-        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
-            resp = await client.post(
-                f"{STORE_URL}/api/v1/store/purchase",
-                json={"plugin_id": plugin_id},
-                headers=headers,
-            )
-            data = resp.json()
-            if resp.status_code >= 400:
-                return {"success": False, "message": data.get("detail", "购买失败")}
-            return data
+        client = _get_client()
+        resp = await client.post(
+            f"{STORE_URL}/api/v1/store/purchase",
+            json={"plugin_id": plugin_id},
+            headers=headers,
+        )
+        data = resp.json()
+        if resp.status_code >= 400:
+            return {"success": False, "message": data.get("detail", "购买失败")}
+        return data
     except Exception as e:
         return {"success": False, "message": f"商店连接失败: {e}"}
 
@@ -196,20 +215,20 @@ async def create_payment_order(
     """
     try:
         headers = {"Authorization": f"Bearer {store_token}"}
-        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
-            resp = await client.post(
-                f"{STORE_URL}/api/v1/pay/create-order",
-                json={
-                    "plugin_id": plugin_id,
-                    "gateway": gateway,
-                    "pay_type": pay_type,
-                },
-                headers=headers,
-            )
-            data = resp.json()
-            if resp.status_code >= 400:
-                return {"success": False, "message": data.get("detail", "创建支付订单失败")}
-            return data
+        client = _get_client()
+        resp = await client.post(
+            f"{STORE_URL}/api/v1/pay/create-order",
+            json={
+                "plugin_id": plugin_id,
+                "gateway": gateway,
+                "pay_type": pay_type,
+            },
+            headers=headers,
+        )
+        data = resp.json()
+        if resp.status_code >= 400:
+            return {"success": False, "message": data.get("detail", "创建支付订单失败")}
+        return data
     except Exception as e:
         return {"success": False, "message": f"商店连接失败: {e}"}
 
@@ -218,15 +237,15 @@ async def query_payment_status(order_no: str, store_token: str) -> Dict[str, Any
     """查询支付订单状态"""
     try:
         headers = {"Authorization": f"Bearer {store_token}"}
-        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
-            resp = await client.get(
-                f"{STORE_URL}/api/v1/pay/status/{order_no}",
-                headers=headers,
-            )
-            data = resp.json()
-            if resp.status_code >= 400:
-                return {"success": False, "message": data.get("detail", "查询失败")}
-            return data
+        client = _get_client()
+        resp = await client.get(
+            f"{STORE_URL}/api/v1/pay/status/{order_no}",
+            headers=headers,
+        )
+        data = resp.json()
+        if resp.status_code >= 400:
+            return {"success": False, "message": data.get("detail", "查询失败")}
+        return data
     except Exception as e:
         return {"success": False, "message": f"查询失败: {e}"}
 
@@ -234,9 +253,9 @@ async def query_payment_status(order_no: str, store_token: str) -> Dict[str, Any
 async def get_payment_gateways() -> Dict[str, Any]:
     """获取可用的支付网关列表"""
     try:
-        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=10) as client:
-            resp = await client.get(f"{STORE_URL}/api/v1/pay/gateways")
-            return _safe_json(resp)
+        client = _get_client(timeout=10)
+        resp = await client.get(f"{STORE_URL}/api/v1/pay/gateways")
+        return _safe_json(resp)
     except Exception as e:
         return {"gateways": []}
 
@@ -244,15 +263,15 @@ async def get_payment_gateways() -> Dict[str, Any]:
 async def store_login(account: str, password: str) -> Dict[str, Any]:
     """登录 Store 账号，获取 JWT token"""
     try:
-        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
-            resp = await client.post(
-                f"{STORE_URL}/api/v1/auth/login",
-                json={"account": account, "password": password},
-            )
-            data = _safe_json(resp)
-            if resp.status_code >= 400:
-                return {"success": False, "message": data.get("detail", "登录失败")}
-            return {"success": True, **data}
+        client = _get_client()
+        resp = await client.post(
+            f"{STORE_URL}/api/v1/auth/login",
+            json={"account": account, "password": password},
+        )
+        data = _safe_json(resp)
+        if resp.status_code >= 400:
+            return {"success": False, "message": data.get("detail", "登录失败")}
+        return {"success": True, **data}
     except Exception as e:
         return {"success": False, "message": f"商店连接失败: {e}"}
 
@@ -260,15 +279,15 @@ async def store_login(account: str, password: str) -> Dict[str, Any]:
 async def store_register(username: str, email: str, password: str) -> Dict[str, Any]:
     """注册 Store 账号"""
     try:
-        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
-            resp = await client.post(
-                f"{STORE_URL}/api/v1/auth/register",
-                json={"username": username, "email": email, "password": password},
-            )
-            data = _safe_json(resp)
-            if resp.status_code >= 400:
-                return {"success": False, "message": data.get("detail", "注册失败")}
-            return {"success": True, **data}
+        client = _get_client()
+        resp = await client.post(
+            f"{STORE_URL}/api/v1/auth/register",
+            json={"username": username, "email": email, "password": password},
+        )
+        data = _safe_json(resp)
+        if resp.status_code >= 400:
+            return {"success": False, "message": data.get("detail", "注册失败")}
+        return {"success": True, **data}
     except Exception as e:
         return {"success": False, "message": f"商店连接失败: {e}"}
 
@@ -276,11 +295,11 @@ async def store_register(username: str, email: str, password: str) -> Dict[str, 
 async def get_my_plugins(store_token: str) -> Dict[str, Any]:
     """获取用户在商店购买的插件列表"""
     try:
-        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0'}, timeout=15) as client:
-            resp = await client.get(
-                f"{STORE_URL}/api/v1/store/my-plugins",
-                headers={"Authorization": f"Bearer {store_token}"},
-            )
-            return _safe_json(resp)
+        client = _get_client()
+        resp = await client.get(
+            f"{STORE_URL}/api/v1/store/my-plugins",
+            headers={"Authorization": f"Bearer {store_token}"},
+        )
+        return _safe_json(resp)
     except Exception as e:
         return {"items": [], "error": f"商店连接失败: {e}"}
