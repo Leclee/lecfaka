@@ -235,6 +235,106 @@ class PluginManager:
 
         await db.commit()
 
+    async def hot_load_plugin(self, plugin_id: str, db: AsyncSession) -> bool:
+        """
+        热加载新安装的插件（运行时不需要重启）。
+
+        在 install_from_store 安装插件到磁盘后调用，
+        动态加载插件到 _plugins 字典并创建数据库记录。
+
+        @param plugin_id  插件目录名（即 plugin.json 中的 id）
+        @param db         数据库会话
+        @return True 加载成功 / False 加载失败
+        """
+        installed_dir = self._base_dir / "installed" / plugin_id
+        plugin_json = installed_dir / "plugin.json"
+
+        if not plugin_json.exists():
+            logger.error(f"[hot_load] {installed_dir} 中找不到 plugin.json")
+            return False
+
+        try:
+            # 如果已加载过（版本更新场景），先清理旧实例
+            old = self._plugins.get(plugin_id)
+            if old and old.instance:
+                try:
+                    await old.instance.on_disable()
+                except Exception:
+                    pass
+                hooks.off_by_owner(plugin_id)
+                PAYMENT_HANDLERS.pop(plugin_id, None)
+                NOTIFY_HANDLERS.pop(plugin_id, None)
+                DELIVERY_HANDLERS.pop(plugin_id, None)
+                THEME_HANDLERS.pop(plugin_id, None)
+
+            # 重新导入模块（处理更新场景）
+            meta = self._load_meta(plugin_json)
+
+            # 强制重新导入模块
+            entry = meta.backend.get("entry", "__init__:Plugin")
+            module_name, class_name = entry.split(":")
+            module_path = f"app.plugins.installed.{plugin_id}.{module_name}"
+
+            import sys
+            # 清除旧的模块缓存以确保加载最新代码
+            for key in list(sys.modules.keys()):
+                if key.startswith(f"app.plugins.installed.{plugin_id}"):
+                    del sys.modules[key]
+
+            module = importlib.import_module(module_path)
+            plugin_class = getattr(module, class_name)
+
+            if not issubclass(plugin_class, PluginBase):
+                raise TypeError(f"{class_name} is not a subclass of PluginBase")
+
+            pi = PluginInstance(
+                meta=meta,
+                plugin_class=plugin_class,
+                path=str(installed_dir),
+                is_builtin=False,
+            )
+            self._plugins[meta.id] = pi
+
+            # 同步到数据库
+            from ..models.plugin import Plugin
+            result = await db.execute(
+                select(Plugin).where(Plugin.plugin_id == plugin_id)
+            )
+            db_plugin = result.scalar_one_or_none()
+
+            author_name = ""
+            if isinstance(meta.author, dict):
+                author_name = meta.author.get("name", "")
+            elif isinstance(meta.author, str):
+                author_name = meta.author
+
+            if db_plugin:
+                db_plugin.version = meta.version
+                db_plugin.name = meta.name
+                db_plugin.description = meta.description
+            else:
+                new_plugin = Plugin(
+                    plugin_id=plugin_id,
+                    name=meta.name,
+                    version=meta.version,
+                    type=meta.type,
+                    author=author_name,
+                    description=meta.description,
+                    icon=meta.icon or "",
+                    is_builtin=False,
+                    status=0,
+                    config="{}",
+                )
+                db.add(new_plugin)
+
+            await db.commit()
+            logger.info(f"[hot_load] {plugin_id} v{meta.version} 热加载成功")
+            return True
+
+        except Exception as e:
+            logger.error(f"[hot_load] {plugin_id} 热加载失败: {e}", exc_info=True)
+            return False
+
     async def _enable_plugin_internal(self, pi: PluginInstance):
         """内部启用插件"""
         instance = pi.create_instance(pi.config)

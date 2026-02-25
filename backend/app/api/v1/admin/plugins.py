@@ -335,12 +335,29 @@ async def install_from_store(
 
     ## 3. 解压安装（调用通用函数）
     try:
-        return _extract_plugin_zip(tmp_path, _get_plugins_dir())
+        result = _extract_plugin_zip(tmp_path, _get_plugins_dir())
     finally:
         try:
             os.unlink(tmp_path)
         except OSError:
             pass
+
+    ## 4. 热加载：安装成功后立即加载到 plugin_manager，无需重启
+    if result.get("success"):
+        loaded_id = result.get("plugin_id", plugin_id)
+        try:
+            ok = await plugin_manager.hot_load_plugin(loaded_id, db)
+            if ok:
+                result["message"] = f"插件 {loaded_id} 安装成功，已自动加载（无需重启）"
+                logger.info(f"[store_install] 热加载成功: {loaded_id}")
+            else:
+                result["message"] += "（热加载失败，请重启服务生效）"
+                logger.warning(f"[store_install] 热加载失败: {loaded_id}")
+        except Exception as e:
+            logger.error(f"[store_install] 热加载异常: {e}", exc_info=True)
+            result["message"] += "（热加载异常，请重启服务生效）"
+
+    return result
 
 
 # ============== 插件列表 ==============
