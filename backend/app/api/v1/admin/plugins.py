@@ -411,13 +411,14 @@ async def enable_plugin(
     admin=Depends(get_current_admin),
 ):
     """启用插件"""
+    from fastapi import HTTPException
     try:
         success = await plugin_manager.enable_plugin(plugin_id, db)
         if success:
             return {"message": f"插件 {plugin_id} 已启用"}
-        return {"message": "插件不存在"}
+        raise HTTPException(status_code=404, detail="插件不存在")
     except ValueError as e:
-        return {"message": str(e)}
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/{plugin_id}/disable")
@@ -427,10 +428,11 @@ async def disable_plugin(
     admin=Depends(get_current_admin),
 ):
     """禁用插件"""
+    from fastapi import HTTPException
     success = await plugin_manager.disable_plugin(plugin_id, db)
     if success:
         return {"message": f"插件 {plugin_id} 已禁用"}
-    return {"message": "插件不存在或未启用"}
+    raise HTTPException(status_code=404, detail="插件不存在或未启用")
 
 
 @router.put("/{plugin_id}/config")
