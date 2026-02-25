@@ -5,6 +5,7 @@
 import json
 import logging
 import os
+from pathlib import Path
 import zipfile
 import tempfile
 import shutil
@@ -40,13 +41,11 @@ def _get_plugins_dir() -> str:
     @brief 获取插件安装目录的绝对路径
     @return plugins/installed 的绝对路径
     """
-    ## backend/app/api/v1/admin/plugins.py -> 往上 5 层到 backend/
-    backend_root = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-    )
-    plugins_dir = os.path.join(backend_root, "plugins", "installed")
-    os.makedirs(plugins_dir, exist_ok=True)
-    return plugins_dir
+    ## backend/app/api/v1/admin/plugins.py → parents[4] = backend/
+    backend_root = Path(__file__).resolve().parents[4]
+    plugins_dir = backend_root / "plugins" / "installed"
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+    return str(plugins_dir)
 
 
 def _find_plugin_json_in_zip(names: list) -> Optional[str]:
