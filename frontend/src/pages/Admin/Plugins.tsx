@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Card, Button, Tag, Typography, Space, Switch, Select,
-  Modal, Form, Input, message, Tabs, Badge, Empty, ColorPicker
+  Modal, Form, Input, message, Tabs, Badge, Empty
 } from 'antd'
 import {
   AppstoreOutlined, SettingOutlined, CheckCircleOutlined,
