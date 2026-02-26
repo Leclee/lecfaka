@@ -20,7 +20,7 @@ from ....api.deps import get_current_admin
 from ....models.plugin import Plugin
 from ....plugins import plugin_manager
 from ....plugins.license_client import (
-    verify_domain, get_store_plugins, download_plugin, check_updates,
+    verify_domain, verify_by_token, get_store_plugins, download_plugin, check_updates,
     purchase_plugin, store_login, store_register, get_my_plugins,
     create_payment_order, query_payment_status, get_payment_gateways,
     APP_VERSION,
@@ -311,6 +311,7 @@ async def proxy_my_plugins(
 
 @router.post("/store/install")
 async def install_from_store(
+    request: Request,
     plugin_id: str = Query(...),
     license_key: str = Query(""),
     store_token: str = Query(""),
@@ -356,6 +357,42 @@ async def install_from_store(
         except Exception as e:
             logger.error(f"[store_install] 热加载异常: {e}", exc_info=True)
             result["message"] += "（热加载异常，请重启服务生效）"
+
+        ## 5. 自动授权验证：如果提供了 store_token，向 Store 验证购买状态并绑定域名
+        if store_token:
+            try:
+                domain = "localhost"
+                if request:
+                    domain = request.headers.get(
+                        "x-forwarded-host",
+                        request.headers.get("host", "localhost"),
+                    )
+                verify_result = await verify_by_token(loaded_id, store_token, domain)
+                if verify_result.get("valid"):
+                    ## 验证通过，更新数据库的 license_status
+                    db_result = await db.execute(
+                        select(Plugin).where(Plugin.plugin_id == loaded_id)
+                    )
+                    db_plugin = db_result.scalar_one_or_none()
+                    if db_plugin:
+                        db_plugin.license_status = 1
+                        db_plugin.license_domain = domain
+                        await db.commit()
+                    ## 同步内存中的状态
+                    pi = plugin_manager.get_plugin(loaded_id)
+                    if pi:
+                        pi.license_status = 1
+                    result["license_status"] = 1
+                    result["message"] += "，授权验证通过"
+                    logger.info(f"[store_install] 授权验证通过: {loaded_id} -> {domain}")
+                else:
+                    reason = verify_result.get("error") or verify_result.get("message") or "未知原因"
+                    result["license_status"] = 0
+                    result["message"] += f"（授权未通过: {reason}）"
+                    logger.warning(f"[store_install] 授权未通过: {loaded_id}, {reason}")
+            except Exception as e:
+                logger.error(f"[store_install] 授权验证异常: {e}", exc_info=True)
+                result["message"] += "（授权验证异常，可手动激活）"
 
     return result
 

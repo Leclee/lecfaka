@@ -66,6 +66,30 @@ async def verify_domain(plugin_id: str, domain: str) -> Dict[str, Any]:
         return {"valid": False, "message": f"授权服务器连接失败: {e}"}
 
 
+async def verify_by_token(plugin_id: str, store_token: str, domain: str) -> Dict[str, Any]:
+    """
+    通过 Store 用户 JWT token 验证是否购买了某插件，并自动绑定域名。
+
+    在主站安装完成后自动调用，完成授权激活。
+
+    @param plugin_id 插件 ID
+    @param store_token Store 用户 JWT token
+    @param domain 当前主站域名
+    @return 包含 valid 字段的验证结果
+    """
+    try:
+        headers = {"Authorization": f"Bearer {store_token}"}
+        client = _get_client()
+        resp = await client.post(
+            f"{STORE_URL}/api/v1/store/verify-by-token",
+            json={"plugin_id": plugin_id, "domain": domain},
+            headers=headers,
+        )
+        return _safe_json(resp)
+    except Exception as e:
+        return {"valid": False, "message": f"授权验证失败: {e}"}
+
+
 async def verify_license(plugin_id: str, license_key: str, domain: str) -> Dict[str, Any]:
     """[兼容旧版] 向 store 服务器验证授权 — 内部转为域名验证"""
     return await verify_domain(plugin_id, domain)
