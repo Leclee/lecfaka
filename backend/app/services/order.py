@@ -547,11 +547,14 @@ class OrderService:
         return order.secret
     
     async def _pull_cards(self, order: Order, commodity: Commodity) -> str:
-        """拉取卡密"""
+        """拉取卡密（带行锁防并发超卖）"""
         # 预选卡密
         if order.card_id:
             result = await self.db.execute(
-                select(Card).where(Card.id == order.card_id).where(Card.status == 0)
+                select(Card)
+                .where(Card.id == order.card_id)
+                .where(Card.status == 0)
+                .with_for_update(skip_locked=True)
             )
             card = result.scalar_one_or_none()
             if card:
@@ -569,7 +572,7 @@ class OrderService:
         else:
             order_by = Card.id.desc()
         
-        # 查询卡密
+        # 查询卡密（FOR UPDATE SKIP LOCKED: 已被其它事务锁定的行直接跳过）
         query = (
             select(Card)
             .where(Card.commodity_id == order.commodity_id)
@@ -579,7 +582,7 @@ class OrderService:
         if order.race:
             query = query.where(Card.race == order.race)
         
-        query = query.order_by(order_by).limit(order.quantity)
+        query = query.order_by(order_by).limit(order.quantity).with_for_update(skip_locked=True)
         
         result = await self.db.execute(query)
         cards = result.scalars().all()

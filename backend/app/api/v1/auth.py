@@ -13,6 +13,7 @@ from ...models.user import User
 from ...core.security import (
     get_password_hash, 
     verify_password,
+    needs_rehash,
     create_access_token,
     create_refresh_token,
     verify_token,
@@ -170,6 +171,12 @@ async def login(
     # 验证密码
     if not verify_password(request.password, user.password_hash, user.salt):
         raise AuthenticationError("密码错误")
+    
+    ## 透明升级：旧 SHA256 密码自动迁移到 bcrypt（用户无感知）
+    if needs_rehash(user.password_hash):
+        new_hash, new_salt = get_password_hash(request.password)
+        user.password_hash = new_hash
+        user.salt = new_salt
     
     # 检查状态
     if user.status != 1:

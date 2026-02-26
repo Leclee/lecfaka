@@ -95,12 +95,11 @@ def create_app() -> FastAPI:
     )
     
     # CORS配置
-    # 由 Nginx 反向代理统一处理域名，后端始终允许所有来源
-    # 生产环境安全性由 Nginx 的 server_name 保证
+    # 从环境变量 CORS_ORIGINS 读取白名单，默认 "*" 允许所有来源
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
+        allow_origins=settings.cors_origins_list,
+        allow_credentials=True if settings.cors_origins != "*" else False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -126,7 +125,7 @@ def create_app() -> FastAPI:
             content={
                 "code": 500,
                 "message": error_detail if settings.debug else "服务器内部错误",
-                "detail": tb if settings.debug else None,
+                "detail": None,  ## 生产环境绝不返回堆栈
                 "data": None
             }
         )
