@@ -200,11 +200,14 @@ async def query_orders(
     contact = request.contact.strip()
     
     # 判断是订单号还是联系方式
-    if len(contact) == 18 and contact.isdigit():
-        # 订单号
+    # 旧格式: 18位纯数字; 新格式: 24位(数字+十六进制字母)
+    # 统一规则: 长度 >= 18 且仅包含十六进制字符
+    _is_trade_no = len(contact) >= 18 and all(c in '0123456789abcdefABCDEF' for c in contact)
+    if _is_trade_no:
+        # 订单号查询
         query = select(Order).where(Order.trade_no == contact)
     else:
-        # 联系方式
+        # 联系方式查询
         query = select(Order).where(Order.contact == contact)
     
     query = query.order_by(Order.created_at.desc())

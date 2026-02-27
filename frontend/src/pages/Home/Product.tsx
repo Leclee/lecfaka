@@ -4,7 +4,7 @@ import {
   Card, Button, Input, Form, Spin, message, Modal,
   Typography, Tag, Divider, InputNumber, Avatar, Dropdown
 } from 'antd'
-import { 
+import {
   ShoppingCartOutlined, SearchOutlined,
   MinusOutlined, PlusOutlined,
   WechatOutlined, AlipayCircleOutlined, WalletOutlined,
@@ -32,7 +32,7 @@ export default function Product() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [form] = Form.useForm()
-  
+
   const [commodity, setCommodity] = useState<CommodityDetail | null>(null)
   const [payments, setPayments] = useState<PaymentMethod[]>([])
   const [loading, setLoading] = useState(true)
@@ -41,21 +41,21 @@ export default function Product() {
   const [selectedPayment, setSelectedPayment] = useState<number | null>(null)
   const [captchaCode, setCaptchaCode] = useState('')
   const [captchaImg, setCaptchaImg] = useState('')
-  
+
   // 二维码支付弹窗
   const [qrcodeModal, setQrcodeModal] = useState(false)
   const [qrcodeUrl, setQrcodeUrl] = useState('')
   const [qrcodeTradeNo, setQrcodeTradeNo] = useState('')
   const [qrcodeChannel, setQrcodeChannel] = useState('')
   const [pollingTimer, setPollingTimer] = useState<ReturnType<typeof setInterval> | null>(null)
-  
+
   // 种类和SKU选择
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [selectedSkus, setSelectedSkus] = useState<Record<string, string>>({})
-  
+
   // 粒子特效开关
   const [particleEnabled, setParticleEnabled] = useState(true)
-  
+
   const { user, logout } = useAuthStore()
 
   const handleLogout = () => {
@@ -95,7 +95,7 @@ export default function Product() {
         }
         groups.get(sku.group)?.push(sku)
       })
-      
+
       const defaultSkus: Record<string, string> = {}
       groups.forEach((options, group) => {
         if (options.length > 0) {
@@ -186,10 +186,10 @@ export default function Product() {
     // 基础价格：种类价格 > 会员价 > 普通价
     const originalPrice = categoryPrice ?? (user ? commodity?.user_price : commodity?.price) ?? 0
     let finalPrice = originalPrice
-    
+
     // 加上 SKU 加价
     finalPrice += skuExtraPrice
-    
+
     // 应用批发规则（找到适用的最大数量档位）
     let appliedRule: typeof wholesalePrices[0] | null = null
     for (const wp of wholesalePrices) {
@@ -197,7 +197,7 @@ export default function Product() {
         appliedRule = wp
       }
     }
-    
+
     if (appliedRule) {
       if (appliedRule.type === 'percent' && appliedRule.discount_percent) {
         // 百分比折扣：discount_percent 是折扣后的百分比（如90表示9折）
@@ -207,7 +207,7 @@ export default function Product() {
         finalPrice = appliedRule.price + skuExtraPrice
       }
     }
-    
+
     return finalPrice
   }, [quantity, wholesalePrices, commodity, user, categoryPrice, skuExtraPrice])
 
@@ -218,14 +218,14 @@ export default function Product() {
 
   const handleSubmit = async (values: any) => {
     if (!commodity) return
-    
+
     // 验证码校验
     if (values.captcha !== captchaCode) {
       message.error('验证码错误')
       refreshCaptcha()
       return
     }
-    
+
     // 检查是否需要登录
     if (commodity.only_user === 1 && !user) {
       message.warning('该商品需要登录后购买')
@@ -237,7 +237,7 @@ export default function Product() {
       message.warning('请选择支付方式')
       return
     }
-    
+
     setSubmitting(true)
     try {
       const res = await createOrder({
@@ -249,7 +249,7 @@ export default function Product() {
         coupon: values.coupon,
         race: selectedCategory || undefined,
       })
-      
+
       // 余额支付成功
       if (res.status === 1) {
         Modal.success({
@@ -310,7 +310,7 @@ export default function Product() {
   const startPolling = (tradeNo: string) => {
     // 清除旧的定时器
     if (pollingTimer) clearInterval(pollingTimer)
-    
+
     const timer = setInterval(async () => {
       try {
         const order = await getOrder(tradeNo)
@@ -339,7 +339,7 @@ export default function Product() {
         // 忽略轮询错误
       }
     }, 3000) // 每3秒检查一次
-    
+
     setPollingTimer(timer)
   }
 
@@ -411,7 +411,9 @@ export default function Product() {
               </Dropdown>
             ) : (
               <>
-                <Link to="/login" className="text-gray-600 hover:text-blue-500">登录</Link>
+                <Link to="/login">
+                  <Button className="rounded-lg border-purple-300 text-purple-600 hover:border-purple-500 hover:text-purple-700">登录</Button>
+                </Link>
                 <Link to="/register">
                   <Button type="primary" className="bg-gradient-to-r from-blue-500 to-purple-600 border-0">创建账号</Button>
                 </Link>
@@ -430,7 +432,7 @@ export default function Product() {
               {/* 粒子网格连线特效 - 绝对定位覆盖整个区域 */}
               {particleEnabled && (
                 <div className="absolute inset-0">
-                  <ParticleNetwork 
+                  <ParticleNetwork
                     particleCount={120}
                     lineColor="rgba(236, 72, 153, 0.4)"
                     particleColor="rgba(236, 72, 153, 0.7)"
@@ -439,9 +441,9 @@ export default function Product() {
                   />
                 </div>
               )}
-              
+
               {/* 粒子特效开关 */}
-              <div 
+              <div
                 className="absolute top-3 right-3 z-20 cursor-pointer select-none"
                 onClick={() => setParticleEnabled(!particleEnabled)}
                 title={particleEnabled ? '关闭粒子特效' : '开启粒子特效'}
@@ -450,17 +452,17 @@ export default function Product() {
                   <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform duration-300 ${particleEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
                 </div>
               </div>
-              
+
               {/* 图片容器 - 绝对定位居中，88%宽度 */}
               <div className="absolute inset-0 flex items-center justify-center p-4 z-10 pointer-events-none">
-                <div 
+                <div
                   className="flex items-center justify-center rounded-2xl overflow-hidden bg-white shadow-xl border border-gray-100 pointer-events-auto"
                   style={{ width: '88%', aspectRatio: '1/1', maxWidth: '500px' }}
                 >
                   {commodity.cover ? (
-                    <img 
-                      src={commodity.cover} 
-                      alt={commodity.name} 
+                    <img
+                      src={commodity.cover}
+                      alt={commodity.name}
                       className="max-w-full max-h-full object-contain p-6"
                     />
                   ) : (
@@ -476,7 +478,7 @@ export default function Product() {
             <Card className="border-0 shadow-lg rounded-2xl flex-1">
               {/* 商品标题 */}
               <Title level={4} className="!mb-2">{commodity.name}</Title>
-              
+
               {/* 标签 */}
               <div className="flex items-center gap-2 mb-4">
                 <Tag color="cyan">
@@ -561,8 +563,8 @@ export default function Product() {
                   label={<span className="text-gray-500">查询密码</span>}
                   rules={commodity.password_status === 1 ? [{ required: true, message: '请设置查询密码' }] : []}
                 >
-                  <Input.Password 
-                    placeholder="设置查询订单的密码" 
+                  <Input.Password
+                    placeholder="设置查询订单的密码"
                     className="rounded-lg"
                   />
                 </Form.Item>
@@ -570,7 +572,7 @@ export default function Product() {
                 {/* 购买数量 */}
                 <Form.Item label={<span className="text-gray-500">购买数量</span>}>
                   <div className="flex items-center gap-2">
-                    <Button 
+                    <Button
                       icon={<MinusOutlined />}
                       onClick={() => setQuantity(Math.max(commodity.minimum || 1, quantity - 1))}
                       className="rounded-lg bg-pink-100 border-pink-200 text-pink-500"
@@ -582,7 +584,7 @@ export default function Product() {
                       max={commodity.maximum || commodity.stock || 999}
                       className="w-20 text-center"
                     />
-                    <Button 
+                    <Button
                       icon={<PlusOutlined />}
                       onClick={() => setQuantity(Math.min(commodity.maximum || commodity.stock || 999, quantity + 1))}
                       className="rounded-lg bg-pink-100 border-pink-200 text-pink-500"
@@ -598,14 +600,14 @@ export default function Product() {
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       {wholesalePrices.map((wp, idx) => (
-                        <div 
-                          key={idx} 
+                        <div
+                          key={idx}
                           className={`flex justify-between px-3 py-2 rounded ${quantity >= wp.quantity ? 'bg-pink-200 text-pink-600' : 'text-pink-400'}`}
                         >
                           <span>≥{wp.quantity}件</span>
                           <span>
-                            {wp.type === 'percent' 
-                              ? `${wp.discount_percent}%` 
+                            {wp.type === 'percent'
+                              ? `${wp.discount_percent}%`
                               : `¥${wp.price}/件`
                             }
                           </span>
@@ -623,7 +625,7 @@ export default function Product() {
                 >
                   <div className="flex items-center gap-4">
                     <Input placeholder="图形验证码" className="flex-1 rounded-lg" />
-                    <div 
+                    <div
                       className="px-4 py-2 bg-pink-100 rounded-lg cursor-pointer select-none text-pink-500 font-bold text-lg tracking-widest"
                       onClick={refreshCaptcha}
                       title="点击刷新"
@@ -674,14 +676,14 @@ export default function Product() {
           </Title>
           <Divider className="!my-3" />
           {commodity.description ? (
-            <div 
+            <div
               className="prose max-w-none"
               dangerouslySetInnerHTML={{ __html: commodity.description }}
             />
           ) : (
             <Text type="secondary">暂无商品详情</Text>
           )}
-          
+
           {commodity.leave_message && (
             <>
               <Divider />
@@ -740,9 +742,9 @@ export default function Product() {
 
           {/* 提示信息 */}
           <div className="text-gray-500 text-sm mb-2">
-            {qrcodeChannel === 'wxpay' ? '请使用微信扫一扫完成支付' : 
-             qrcodeChannel === 'alipay' ? '请使用支付宝扫一扫完成支付' : 
-             '请使用对应APP扫一扫完成支付'}
+            {qrcodeChannel === 'wxpay' ? '请使用微信扫一扫完成支付' :
+              qrcodeChannel === 'alipay' ? '请使用支付宝扫一扫完成支付' :
+                '请使用对应APP扫一扫完成支付'}
           </div>
           <div className="text-gray-400 text-xs">
             订单号：{qrcodeTradeNo}
