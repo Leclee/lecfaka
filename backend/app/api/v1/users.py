@@ -70,8 +70,6 @@ async def get_current_user(
     db: DbSession,
 ):
     """获取当前用户详细信息"""
-    import hashlib
-    
     # 统计推广人数
     referral_count_result = await db.execute(
         select(func.count()).where(User.parent_id == user.id)
@@ -86,11 +84,6 @@ async def get_current_user(
         )
     )
     total_income = float(income_result.scalar() or 0)
-    
-    # 生成商户密钥
-    merchant_key = hashlib.sha256(
-        f"{user.id}-{user.username}-{user.created_at}".encode()
-    ).hexdigest()[:16].upper()
     
     return {
         "id": user.id,
@@ -112,7 +105,7 @@ async def get_current_user(
         "last_login_ip": user.last_login_ip,
         "parent_id": user.parent_id,
         "merchant_id": user.id + 1000,
-        "merchant_key": merchant_key,
+        "merchant_key": user.api_key or "",
         "referral_count": referral_count,
     }
 
@@ -192,55 +185,55 @@ async def get_my_orders(
         result = await db.execute(query)
         orders = result.scalars().all()
         
+        if not orders:
+            return {"total": total, "page": page, "limit": limit, "items": []}
+        
+        # 批量预加载商品信息（避免 N+1）
+        from ...models.commodity import Commodity
+        from ...models.card import Card
+        commodity_ids = list({o.commodity_id for o in orders})
+        payment_ids = list({o.payment_id for o in orders if o.payment_id})
+        order_ids = [o.id for o in orders]
+        
+        commodity_map = {}
+        if commodity_ids:
+            c_result = await db.execute(
+                select(Commodity.id, Commodity.name, Commodity.cover, Commodity.delivery_way, Commodity.leave_message)
+                .where(Commodity.id.in_(commodity_ids))
+            )
+            for row in c_result.all():
+                commodity_map[row[0]] = row
+        
+        payment_map = {}
+        if payment_ids:
+            from ...models.payment import PaymentMethod
+            p_result = await db.execute(
+                select(PaymentMethod.id, PaymentMethod.name).where(PaymentMethod.id.in_(payment_ids))
+            )
+            for row in p_result.all():
+                payment_map[row[0]] = row[1]
+        
+        # 批量预加载卡密信息（只查已发货的订单）
+        delivered_order_ids = [o.id for o in orders if o.delivery_status == 1]
+        cards_map = {}
+        if delivered_order_ids:
+            cards_result = await db.execute(
+                select(Card.order_id, Card.secret).where(Card.order_id.in_(delivered_order_ids))
+            )
+            for row in cards_result.all():
+                cards_map.setdefault(row[0], []).append(row[1])
+        
         items = []
         for order in orders:
-            # 获取商品信息
-            commodity_name = None
-            commodity_cover = None
-            delivery_way = 0
-            leave_message = None
+            commodity = commodity_map.get(order.commodity_id)
+            commodity_name = commodity[1] if commodity else None
+            commodity_cover = commodity[2] if commodity else None
+            delivery_way = commodity[3] if commodity else 0
+            leave_message = commodity[4] if commodity else None
+            payment_method_name = payment_map.get(order.payment_id)
             
-            try:
-                commodity_result = await db.execute(
-                    select(
-                        Commodity.name, 
-                        Commodity.cover, 
-                        Commodity.delivery_way,
-                        Commodity.leave_message
-                    ).where(Commodity.id == order.commodity_id)
-                )
-                commodity = commodity_result.first()
-                if commodity:
-                    commodity_name = commodity[0]
-                    commodity_cover = commodity[1]
-                    delivery_way = commodity[2] or 0
-                    leave_message = commodity[3]
-            except Exception:
-                pass
-            
-            # 获取支付方式名称
-            payment_method_name = None
-            if order.payment_id:
-                try:
-                    from ...models.payment import PaymentMethod
-                    payment_result = await db.execute(
-                        select(PaymentMethod.name).where(PaymentMethod.id == order.payment_id)
-                    )
-                    payment_method_name = payment_result.scalar()
-                except Exception:
-                    pass
-            
-            # 获取卡密信息（已发货的订单）
-            cards_info = None
-            if order.delivery_status == 1:
-                try:
-                    cards_result = await db.execute(
-                        select(Card.secret).where(Card.order_id == order.id)
-                    )
-                    cards = [c for c in cards_result.scalars().all() if c]
-                    cards_info = "\n".join(cards) if cards else None
-                except Exception:
-                    pass
+            cards = cards_map.get(order.id, [])
+            cards_info = "\n".join(c for c in cards if c) or None
             
             items.append({
                 "trade_no": order.trade_no,
@@ -248,7 +241,7 @@ async def get_my_orders(
                 "quantity": order.quantity,
                 "status": order.status,
                 "delivery_status": order.delivery_status,
-                "delivery_way": delivery_way,
+                "delivery_way": delivery_way or 0,
                 "created_at": order.created_at.isoformat() if order.created_at else None,
                 "paid_at": order.paid_at.isoformat() if order.paid_at else None,
                 "commodity_name": commodity_name,
@@ -270,6 +263,7 @@ async def get_my_orders(
         print(f"[ERROR] get_my_orders: {e}")
         traceback.print_exc()
         raise
+
 
 
 @router.get("/me/bills", summary="获取我的账单")
@@ -383,13 +377,12 @@ async def reset_merchant_key(
     db: DbSession,
 ):
     """重置商户密钥"""
-    import hashlib
-    from datetime import datetime
+    from ...core.security import generate_api_key
     
-    # 生成新的商户密钥
-    new_key = hashlib.sha256(
-        f"{user.id}-{user.username}-{datetime.now(timezone.utc).isoformat()}".encode()
-    ).hexdigest()[:16].upper()
+    # 生成新的商户密钥并持久化到数据库
+    new_key = generate_api_key()
+    user.api_key = new_key
+    await db.flush()
     
     return {
         "merchant_key": new_key,
@@ -730,11 +723,7 @@ async def create_withdrawal(
     from ...models.withdrawal import Withdrawal
     from ...core.exceptions import ValidationError
     
-    # 检查余额（硬币）
-    if user.coin < request.amount:
-        raise ValidationError("硬币余额不足")
-    
-    # 获取提现手续费
+    # 获取提现手续费和最低金额
     from ...models.config import SystemConfig
     fee_result = await db.execute(
         select(SystemConfig.value).where(SystemConfig.key == "withdraw_fee")
@@ -750,18 +739,32 @@ async def create_withdrawal(
         raise ValidationError(f"最低提现金额为 {min_amount} 元")
     
     actual_amount = request.amount - fee
+    if actual_amount <= 0:
+        raise ValidationError("提现金额扣除手续费后不能为零或负数")
+    
+    # 为了防并发超提，加排他悲观锁重新读取用户最新硬币余额
+    result = await db.execute(
+        select(User).where(User.id == user.id).with_for_update()
+    )
+    locked_user = result.scalar_one_or_none()
+    if not locked_user:
+        raise NotFoundError("用户不存在")
+    
+    # 加锁后再次检查余额
+    if float(locked_user.coin or 0) < request.amount:
+        raise ValidationError("硬币余额不足")
     
     # 获取提现账户
-    account = user.alipay if request.method == "alipay" else user.wechat
+    account = locked_user.alipay if request.method == "alipay" else locked_user.wechat
     if not account:
         raise ValidationError(f"请先在安全中心设置{request.method}账号")
     
     # 扣除硬币
-    user.coin = user.coin - request.amount
+    locked_user.coin = float(locked_user.coin or 0) - request.amount
     
     # 创建提现记录
     withdrawal = Withdrawal(
-        user_id=user.id,
+        user_id=locked_user.id,
         amount=request.amount,
         fee=fee,
         actual_amount=actual_amount,

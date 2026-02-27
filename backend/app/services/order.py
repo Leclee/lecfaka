@@ -529,9 +529,9 @@ class OrderService:
     
     async def deliver_order(self, order: Order) -> str:
         """发货"""
-        # 获取商品
+        # 获取商品（加行锁，防止并发超卖）
         result = await self.db.execute(
-            select(Commodity).where(Commodity.id == order.commodity_id)
+            select(Commodity).where(Commodity.id == order.commodity_id).with_for_update()
         )
         commodity = result.scalar_one_or_none()
         
@@ -540,13 +540,18 @@ class OrderService:
             order.delivery_status = 1
             return order.secret
         
-        # 自动发货
+        # 自动发货（卡密）
         if commodity.delivery_way == 0:
             secret = await self._pull_cards(order, commodity)
             order.secret = secret
             order.delivery_status = 1
         else:
-            # 手动发货
+            # 手动发货：检查库存是否足够
+            if commodity.stock > 0 and commodity.stock < order.quantity:
+                raise StockError("库存不足，请联系客服")
+            # 扣减手动发货库存（stock > 0 才扣减，为 0 表示不限库存）
+            if commodity.stock > 0:
+                commodity.stock = commodity.stock - order.quantity
             order.secret = commodity.delivery_message or "正在发货中，请耐心等待"
             order.delivery_status = 0
         
@@ -628,6 +633,9 @@ class OrderService:
         race: Optional[str],
     ):
         """验证购买条件"""
+        if quantity <= 0:
+            raise ValidationError("购买数量必须大于0")
+            
         # 仅登录用户可购买
         if commodity.only_user == 1 and not user:
             raise ValidationError("请先登录后再购买")
@@ -754,8 +762,17 @@ class OrderService:
         self, order: Order, user: User, commodity: Commodity
     ):
         """余额支付（Decimal 精度）"""
-        balance = Decimal(str(user.balance))
-        amount = Decimal(str(order.amount))
+        
+        # 为了防并发双花，加排他悲观锁重新拿一遍用户的最新余额
+        result = await self.db.execute(
+            select(User).where(User.id == user.id).with_for_update()
+        )
+        locked_user = result.scalar_one_or_none()
+        if not locked_user:
+            raise NotFoundError("用户已不存在")
+            
+        balance = Decimal(str(locked_user.balance or 0))
+        amount = Decimal(str(order.amount or 0))
         
         if balance < amount:
             raise InsufficientBalanceError(
@@ -763,14 +780,15 @@ class OrderService:
             )
         
         # 扣除余额
-        user.balance = balance - amount
+        locked_user.balance = balance - amount
         
         # 记录账单
         bill = Bill(
-            user_id=user.id,
+            user_id=locked_user.id,
             amount=amount,
-            balance=user.balance,
+            balance=locked_user.balance,
             type=0,
+            currency=0,
             description=f"购买商品[{commodity.name}]",
             order_trade_no=order.trade_no,
         )

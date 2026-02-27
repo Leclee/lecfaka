@@ -5,7 +5,7 @@
 import json as json_lib
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Query, Request
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
@@ -497,7 +497,7 @@ async def get_payments(
 class CreateOrderRequest(BaseModel):
     """鍒涘缓璁㈠崟璇锋眰"""
     commodity_id: int
-    quantity: int = 1
+    quantity: int = Field(1, ge=1, description="璐拱鏁伴噺")
     payment_id: int
     contact: str
     password: Optional[str] = None

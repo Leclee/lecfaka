@@ -90,12 +90,12 @@ async def _handle_callback(handler: str, request: Request, db):
     
     # 4. 查找商品订单或充值订单
     result = await db.execute(
-        select(Order).where(Order.trade_no == callback_result.trade_no)
+        select(Order).where(Order.trade_no == callback_result.trade_no).with_for_update()
     )
     order = result.scalar_one_or_none()
 
     recharge_result = await db.execute(
-        select(RechargeOrder).where(RechargeOrder.trade_no == callback_result.trade_no)
+        select(RechargeOrder).where(RechargeOrder.trade_no == callback_result.trade_no).with_for_update()
     )
     recharge_order = recharge_result.scalar_one_or_none()
 
