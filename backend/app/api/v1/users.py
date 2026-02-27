@@ -105,7 +105,7 @@ async def get_current_user(
         "last_login_ip": user.last_login_ip,
         "parent_id": user.parent_id,
         "merchant_id": user.id + 1000,
-        "merchant_key": user.api_key or "",
+        "merchant_key": "",
         "referral_count": referral_count,
     }
 
