@@ -3,7 +3,7 @@
 """
 
 import json as json_lib
-from datetime import datetime
+from datetime import datetime, timezone, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, List
 from fastapi import APIRouter, Query, Request

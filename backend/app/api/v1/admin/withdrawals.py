@@ -3,7 +3,7 @@
 """
 
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone, timezone
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func

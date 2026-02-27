@@ -1,3 +1,4 @@
+from datetime import timezone
 """
 订单服务
 处理订单创建、支付、发货等核心业务逻辑
@@ -7,7 +8,7 @@
 
 import json as json_lib
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, Dict, Any, List
 from sqlalchemy import select, func

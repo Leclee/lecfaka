@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams, Link, useNavigate } from 'react-router-dom'
 import {
   Card, Input, Button, Table, Tag, Modal, Layout,
   Typography, Space, Empty, message, Avatar, Dropdown
 } from 'antd'
-import { 
-  SearchOutlined, ShoppingCartOutlined, UserOutlined, 
+import {
+  SearchOutlined, ShoppingCartOutlined, UserOutlined,
   LogoutOutlined, SettingOutlined
 } from '@ant-design/icons'
 import { queryOrders, getOrder, getOrderSecret, OrderDetail } from '../../api/order'
@@ -19,7 +19,7 @@ export default function Query() {
   const [searchParams] = useSearchParams()
   const initialTradeNo = searchParams.get('trade_no') || ''
   const { user, token, logout } = useAuthStore()
-  
+
   const [keyword, setKeyword] = useState(initialTradeNo)
   const [loading, setLoading] = useState(false)
   const [orders, setOrders] = useState<OrderDetail[]>([])
@@ -45,7 +45,7 @@ export default function Query() {
       message.warning('请输入订单号或联系方式')
       return
     }
-    
+
     setLoading(true)
     try {
       const res = await queryOrders(keyword.trim())
@@ -60,15 +60,22 @@ export default function Query() {
     }
   }
 
+  useEffect(() => {
+    if (initialTradeNo) {
+      handleSearch()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const handleViewSecret = async (order: OrderDetail) => {
     setSelectedOrder(order)
-    
+
     // 如果有密码保护
     if (order.has_password) {
       setSecretModalVisible(true)
       return
     }
-    
+
     // 直接获取卡密
     try {
       const fullOrder = await getOrder(order.trade_no)
@@ -92,12 +99,12 @@ export default function Query() {
 
   const handleGetSecret = async () => {
     if (!selectedOrder) return
-    
+
     try {
       const res = await getOrderSecret(selectedOrder.trade_no, password)
       setSecretModalVisible(false)
       setPassword('')
-      
+
       Modal.success({
         title: '卡密信息',
         content: (
@@ -202,8 +209,8 @@ export default function Query() {
           {token && user ? (
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
               <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 rounded-lg px-3 py-1.5 transition-colors">
-                <Avatar 
-                  src={user.avatar} 
+                <Avatar
+                  src={user.avatar}
                   icon={<UserOutlined />}
                   className="bg-gradient-to-br from-blue-500 to-purple-600"
                 />
@@ -215,14 +222,14 @@ export default function Query() {
             </Dropdown>
           ) : (
             <div className="flex gap-2">
-              <Link 
-                to="/login" 
+              <Link
+                to="/login"
                 className="px-4 py-1.5 text-blue-600 hover:text-blue-700 font-medium transition-colors"
               >
                 登录
               </Link>
-              <Link 
-                to="/register" 
+              <Link
+                to="/register"
                 className="px-4 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:shadow-lg transition-all"
               >
                 注册
@@ -238,7 +245,7 @@ export default function Query() {
             <SearchOutlined className="text-blue-500" />
             <Title level={4} className="!mb-0">订单查询</Title>
           </div>
-          
+
           <div className="flex gap-4 mb-6">
             <Input
               placeholder="订单号/联系方式"
