@@ -11,7 +11,7 @@ from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, Dict, Any, List
 from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy, timezone.ext.asyncio import AsyncSession
 
 from ..models import (
     Order, Commodity, Card, User, PaymentMethod,
@@ -330,6 +330,12 @@ class OrderService:
         else:
             trade_no = generate_trade_no()  # 最后一搏
         
+        # 处理密码哈希
+        hashed_password = password
+        if password:
+            from ..core.security import get_password_hash
+            hashed_password, _ = get_password_hash(password)
+            
         order = Order(
             trade_no=trade_no,
             user_id=user.id if user else None,
@@ -338,7 +344,7 @@ class OrderService:
             amount=price_info["amount"],
             quantity=quantity,
             contact=contact,
-            password=password,
+            password=hashed_password,
             race=race,
             card_id=card_id,
             widget=str(widget) if widget else None,
@@ -505,7 +511,7 @@ class OrderService:
         
         # 完成订单
         order.status = 1
-        order.paid_at = datetime.utcnow()
+        order.paid_at = datetime.now(timezone.utc)
         order.external_trade_no = callback_result.external_trade_no
         
         # 钩子
@@ -560,7 +566,7 @@ class OrderService:
             if card:
                 card.status = 1
                 card.order_id = order.id
-                card.sold_at = datetime.utcnow()
+                card.sold_at = datetime.now(timezone.utc)
                 return card.secret
             return "预选卡密已被售出"
         
@@ -594,7 +600,7 @@ class OrderService:
         for card in cards:
             card.status = 1
             card.order_id = order.id
-            card.sold_at = datetime.utcnow()
+            card.sold_at = datetime.now(timezone.utc)
             secrets.append(card.secret)
         
         return "\n".join(secrets)
@@ -720,7 +726,7 @@ class OrderService:
             raise ValidationError("该优惠券不适用于此商品")
         if coupon.category_id and coupon.category_id != commodity.category_id:
             raise ValidationError("该优惠券不适用于此分类")
-        if coupon.expires_at and coupon.expires_at < datetime.utcnow():
+        if coupon.expires_at and coupon.expires_at < datetime.now(timezone.utc):
             raise ValidationError("优惠券已过期")
         if float(coupon.money) >= amount:
             raise ValidationError("优惠券面额大于订单金额")
@@ -738,7 +744,7 @@ class OrderService:
             coupon.use_life += 1
             coupon.life -= 1
             coupon.trade_no = trade_no
-            coupon.used_at = datetime.utcnow()
+            coupon.used_at = datetime.now(timezone.utc)
             if coupon.life <= 0:
                 coupon.status = 1
         
@@ -772,7 +778,7 @@ class OrderService:
         
         # 更新订单状态
         order.status = 1
-        order.paid_at = datetime.utcnow()
+        order.paid_at = datetime.now(timezone.utc)
     
     async def _create_payment(
         self,
@@ -870,8 +876,14 @@ class OrderService:
         if not promoter:
             return
         
-        # 单级返佣 10%
-        rebate_rate = Decimal("0.1")
+        # 动态获取分销返佣比例，默认 10%
+        from ..models.config import SystemConfig
+        rate_str = await SystemConfig.get_value(self.db, "commission_rate", "0.1")
+        try:
+            rebate_rate = Decimal(rate_str)
+        except:
+            rebate_rate = Decimal("0.1")
+            
         rebate = (Decimal(str(order.amount)) * rebate_rate).quantize(Decimal("0.01"))
         
         if rebate >= Decimal("0.01"):

@@ -7,7 +7,7 @@ from typing import List
 from fastapi import APIRouter
 from sqlalchemy import select, func, text
 
-from ...deps import DbSession, CurrentAdmin
+from , timezone...deps import DbSession, CurrentAdmin
 from ....models.order import Order
 from ....models.user import User
 from ....models.commodity import Commodity
@@ -27,7 +27,7 @@ async def get_dashboard(
 ):
     """获取管理后台仪表盘统计数据"""
     
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday = today - timedelta(days=1)
     this_week = today - timedelta(days=today.weekday())
     this_month = today.replace(day=1)
@@ -215,7 +215,7 @@ async def get_chart_data(
     days: int = 7,
 ):
     """获取近N天的销售图表数据"""
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     
     chart_data = []
     for i in range(days - 1, -1, -1):

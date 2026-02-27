@@ -35,12 +35,21 @@ class InstallRequest(BaseModel):
 
 # ============== Helpers ==============
 
+_installed_cached = False
+
 async def _is_installed(db: AsyncSession) -> bool:
-    """检查是否已安装（是否存在管理员用户）"""
+    """检查是否已安装（是否存在管理员用户，使用内存缓存优化查询）"""
+    global _installed_cached
+    if _installed_cached:
+        return True
+        
     result = await db.execute(
         select(User.id).where(User.is_admin == True).limit(1)
     )
-    return result.scalar_one_or_none() is not None
+    is_installed = result.scalar_one_or_none() is not None
+    if is_installed:
+        _installed_cached = True
+    return is_installed
 
 
 # ============== APIs ==============

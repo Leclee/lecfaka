@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import DOMPurify from 'dompurify'
 import {
   Card, Button, Input, Form, Spin, message, Modal,
   Typography, Tag, Divider, InputNumber, Avatar, Dropdown
@@ -678,7 +679,7 @@ export default function Product() {
           {commodity.description ? (
             <div
               className="prose max-w-none"
-              dangerouslySetInnerHTML={{ __html: commodity.description }}
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(commodity.description) }}
             />
           ) : (
             <Text type="secondary">暂无商品详情</Text>

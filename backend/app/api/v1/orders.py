@@ -179,9 +179,17 @@ async def get_order_secret(
     if order.status != 1:
         raise ValidationError("订单未支付")
     
-    # 验证密码
-    if order.password and order.password != request.password:
-        raise ValidationError("密码错误")
+    # 验证密码（支持明文兼容旧订单，新订单是 bcrypt 哈希）
+    if order.password:
+        is_valid = False
+        if order.password.startswith("$2b$"):
+            from ...core.security import verify_password
+            is_valid = verify_password(request.password, order.password, "")
+        else:
+            is_valid = (order.password == request.password)
+            
+        if not is_valid:
+            raise ValidationError("密码错误")
     
     return {
         "secret": order.secret,
@@ -205,24 +213,22 @@ async def query_orders(
     _is_trade_no = len(contact) >= 18 and all(c in '0123456789abcdefABCDEF' for c in contact)
     if _is_trade_no:
         # 订单号查询
-        query = select(Order).where(Order.trade_no == contact)
+        query = select(Order, Commodity.name.label("commodity_name")).outerjoin(
+            Commodity, Order.commodity_id == Commodity.id
+        ).where(Order.trade_no == contact)
     else:
         # 联系方式查询
-        query = select(Order).where(Order.contact == contact)
+        query = select(Order, Commodity.name.label("commodity_name")).outerjoin(
+            Commodity, Order.commodity_id == Commodity.id
+        ).where(Order.contact == contact)
     
     query = query.order_by(Order.created_at.desc())
     
     result = await db.execute(query.offset((page - 1) * limit).limit(limit))
-    orders = result.scalars().all()
+    rows = result.all()
     
     items = []
-    for order in orders:
-        # 获取商品名称
-        commodity_result = await db.execute(
-            select(Commodity.name).where(Commodity.id == order.commodity_id)
-        )
-        commodity_name = commodity_result.scalar()
-        
+    for order, commodity_name in rows:
         items.append({
             "trade_no": order.trade_no,
             "amount": float(order.amount),

@@ -88,7 +88,7 @@ async def get_bill_stats(
     """获取账单统计"""
     from datetime import datetime, timedelta
     
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today , timezone= datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     
     # 今日收入（余额）
     today_income = (await db.execute(

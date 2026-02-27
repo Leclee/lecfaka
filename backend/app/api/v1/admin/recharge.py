@@ -100,7 +100,7 @@ async def get_recharge_stats(
     """获取充值统计"""
     from datetime import datetime, timedelta
     
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today , timezone= datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     
     # 总订单数
     total_count = await db.execute(
@@ -157,7 +157,7 @@ async def complete_recharge(
     
     # 更新订单状态
     order.status = 1
-    order.paid_at = datetime.utcnow()
+    order.paid_at = datetime.now(timezone.utc)
     
     # 增加用户余额
     user_result = await db.execute(

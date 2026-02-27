@@ -8,7 +8,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Request
-from fastapi.responses import PlainTextResponse
+from fastapi, timezone.responses import PlainTextResponse
 from sqlalchemy import select, func
 
 from ..deps import DbSession
@@ -123,7 +123,7 @@ async def _handle_callback(handler: str, request: Request, db):
             return payment_instance.get_callback_response(False)
 
         recharge_order.status = 1
-        recharge_order.paid_at = datetime.utcnow()
+        recharge_order.paid_at = datetime.now(timezone.utc)
         recharge_order.external_trade_no = callback_result.external_trade_no
 
         user.balance = Decimal(str(user.balance or 0)) + Decimal(str(recharge_order.actual_amount or 0))
@@ -174,88 +174,26 @@ async def _handle_callback(handler: str, request: Request, db):
     
     # 7. 更新订单状态为已支付
     order.status = 1
-    order.paid_at = datetime.utcnow()
+    order.paid_at = datetime.now(timezone.utc)
     order.external_trade_no = callback_result.external_trade_no
     
     # 8. 钩子：支付回调 + 支付成功
     await hooks.emit(Events.PAYMENT_CALLBACK, {"order": order, "handler": handler, "callback_data": data})
     await hooks.emit(Events.ORDER_PAID, {"order": order, "callback_data": data})
     
-    # 9. 发货
-    result = await db.execute(
-        select(Commodity).where(Commodity.id == order.commodity_id)
-    )
-    commodity = result.scalar_one_or_none()
-    
-    if commodity and commodity.delivery_way == 0:
-        # 自动发货 - 拉取卡密
-        card_query = (
-            select(Card)
-            .where(Card.commodity_id == commodity.id)
-            .where(Card.status == 0)
-        )
-        if order.race:
-            card_query = card_query.where(Card.race == order.race)
-        
-        if commodity.delivery_auto_mode == 0:
-            card_query = card_query.order_by(Card.id.asc())
-        elif commodity.delivery_auto_mode == 1:
-            card_query = card_query.order_by(func.random())
-        else:
-            card_query = card_query.order_by(Card.id.desc())
-        
-        card_query = card_query.limit(order.quantity)
-        cards_result = await db.execute(card_query)
-        cards = cards_result.scalars().all()
-        
-        if len(cards) >= order.quantity:
-            secrets = []
-            for card in cards:
-                card.status = 1
-                card.order_id = order.id
-                card.sold_at = datetime.utcnow()
-                secrets.append(card.secret)
-            order.secret = "\n".join(secrets)
-            order.delivery_status = 1
-        else:
-            order.secret = "库存不足，请联系客服"
-            order.delivery_status = 0
-    elif commodity:
-        # 手动发货
-        order.secret = commodity.delivery_message or "您的订单正在处理中，请耐心等待..."
-        order.delivery_status = 0
+    # 9. 发货（委托 OrderService，带行锁防并发超卖）
+    from ...services.order import OrderService
+    svc = OrderService(db)
+    secret = await svc.deliver_order(order)
     
     # 10. 钩子：发货完成
-    await hooks.emit(Events.ORDER_DELIVERED, {"order": order, "secret": order.secret})
+    await hooks.emit(Events.ORDER_DELIVERED, {"order": order, "secret": secret})
     
     # 11. 处理分销佣金（Decimal 精度）
-    if order.from_user_id:
-        promoter_result = await db.execute(
-            select(User).where(User.id == order.from_user_id)
-        )
-        promoter = promoter_result.scalar_one_or_none()
-        if promoter:
-            rebate = (Decimal(str(order.amount)) * Decimal("0.1")).quantize(Decimal("0.01"))
-            if rebate >= Decimal("0.01"):
-                promoter.balance = Decimal(str(promoter.balance)) + rebate
-                order.rebate = rebate
-                bill = Bill(
-                    user_id=promoter.id,
-                    amount=rebate,
-                    balance=promoter.balance,
-                    type=1,
-                    description=f"推广返佣[{order.trade_no}]",
-                    order_trade_no=order.trade_no,
-                )
-                db.add(bill)
+    await svc._process_commission(order)
     
     # 12. 累计用户消费（Decimal 精度）
-    if order.user_id:
-        from decimal import Decimal as D
-        result = await db.execute(select(User).where(User.id == order.user_id))
-        user = result.scalar_one_or_none()
-        if user:
-            user.total_recharge = D(str(user.total_recharge or 0)) + D(str(order.amount))
+    await svc._accumulate_recharge(order)
     
     await db.commit()
     

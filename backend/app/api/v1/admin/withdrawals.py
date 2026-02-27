@@ -8,7 +8,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 
-from ...deps import DbSession, CurrentAdmin
+from , timezone...deps import DbSession, CurrentAdmin
 from ....models.withdrawal import Withdrawal
 from ....models.user import User
 from ....models.bill import Bill
@@ -174,7 +174,7 @@ async def review_withdrawal(
     
     withdrawal.admin_id = admin.id
     withdrawal.admin_remark = data.remark
-    withdrawal.reviewed_at = datetime.utcnow()
+    withdrawal.reviewed_at = datetime.now(timezone.utc)
     
     return {"message": "操作成功"}
 
@@ -199,7 +199,7 @@ async def paid_withdrawal(
         raise ValidationError("只能对已审核的提现进行打款确认")
     
     withdrawal.status = 2
-    withdrawal.paid_at = datetime.utcnow()
+    withdrawal.paid_at = datetime.now(timezone.utc)
     if data.remark:
         withdrawal.admin_remark = data.remark
     

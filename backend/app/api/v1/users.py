@@ -10,7 +10,7 @@ from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 
-from ..deps import DbSession, CurrentUser
+from , timezone..deps import DbSession, CurrentUser
 from ...models.user import User, UserGroup
 from ...models.order import Order
 from ...models.bill import Bill
@@ -388,7 +388,7 @@ async def reset_merchant_key(
     
     # 生成新的商户密钥
     new_key = hashlib.sha256(
-        f"{user.id}-{user.username}-{datetime.utcnow().isoformat()}".encode()
+        f"{user.id}-{user.username}-{datetime.now(timezone.utc).isoformat()}".encode()
     ).hexdigest()[:16].upper()
     
     return {
@@ -580,7 +580,7 @@ async def create_recharge(
     if actual_amount <= 0:
         raise ValidationError("Actual recharge amount must be greater than 0")
 
-    trade_no = f"R{datetime.utcnow().strftime('%Y%m%d%H%M%S')}{uuid.uuid4().hex[:8].upper()}"
+    trade_no = f"R{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}{uuid.uuid4().hex[:8].upper()}"
     recharge = RechargeOrder(
         trade_no=trade_no,
         user_id=user.id,

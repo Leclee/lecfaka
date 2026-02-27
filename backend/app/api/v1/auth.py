@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select, or_
 
-from ..deps import DbSession, CurrentUser
+from , timezone..deps import DbSession, CurrentUser
 from ...models.user import User
 from ...core.security import (
     get_password_hash, 
@@ -166,11 +166,11 @@ async def login(
     user = result.scalar_one_or_none()
     
     if not user:
-        raise AuthenticationError("用户不存在")
+        raise AuthenticationError("用户名或密码错误")
     
     # 验证密码
     if not verify_password(request.password, user.password_hash, user.salt):
-        raise AuthenticationError("密码错误")
+        raise AuthenticationError("用户名或密码错误")
     
     ## 透明升级：旧 SHA256 密码自动迁移到 bcrypt（用户无感知）
     if needs_rehash(user.password_hash):
@@ -183,7 +183,7 @@ async def login(
         raise AuthenticationError("账户已被禁用")
     
     # 更新登录信息
-    user.last_login_at = datetime.utcnow()
+    user.last_login_at = datetime.now(timezone.utc)
     user.last_login_ip = req.client.host if req.client else None
     
     # 钩子：用户登录

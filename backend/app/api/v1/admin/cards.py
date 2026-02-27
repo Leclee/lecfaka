@@ -8,7 +8,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, or_
 
-from ...deps import DbSession, CurrentAdmin
+from , timezone...deps import DbSession, CurrentAdmin
 from ....models.card import Card
 from ....models.commodity import Commodity
 from ....models.order import Order
@@ -250,7 +250,7 @@ async def batch_update_cards_status(
             continue
         card.status = request.status
         if request.status == 1:
-            card.sold_at = datetime.utcnow()
+            card.sold_at = datetime.now(timezone.utc)
         updated_count += 1
     
     await db.flush()

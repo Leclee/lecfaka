@@ -16,7 +16,7 @@ from typing import Optional
 import bcrypt
 from jose import JWTError, jwt
 
-from ..config import settings
+from , timezone..config import settings
 
 ## bcrypt 哈希的特征前缀
 _BCRYPT_PREFIX = "$2b$"
@@ -81,9 +81,9 @@ def create_access_token(
     """创建访问Token"""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(
+        expire = datetime.now(timezone.utc) + timedelta(
             minutes=settings.jwt_access_token_expire_minutes
         )
     to_encode.update({"exp": expire, "type": "access"})
@@ -102,9 +102,9 @@ def create_refresh_token(
     """创建刷新Token"""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(
+        expire = datetime.now(timezone.utc) + timedelta(
             days=settings.jwt_refresh_token_expire_days
         )
     to_encode.update({"exp": expire, "type": "refresh"})

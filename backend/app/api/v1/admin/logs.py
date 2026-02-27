@@ -82,7 +82,7 @@ async def get_log_stats(
     """获取日志统计"""
     from datetime import datetime, timedelta
     
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today , timezone= datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     
     # 总数
     total = (await db.execute(
