@@ -11,7 +11,7 @@ from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, Dict, Any, List
 from sqlalchemy import select, func
-from sqlalchemy, timezone.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import (
     Order, Commodity, Card, User, PaymentMethod,

@@ -10,13 +10,13 @@ import secrets
 import hashlib
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import bcrypt
 from jose import JWTError, jwt
 
-from , timezone..config import settings
+from ..config import settings
 
 ## bcrypt 哈希的特征前缀
 _BCRYPT_PREFIX = "$2b$"

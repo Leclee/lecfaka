@@ -8,7 +8,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Request
-from fastapi, timezone.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse
 from sqlalchemy import select, func
 
 from ..deps import DbSession

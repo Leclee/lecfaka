@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select, or_
 
-from , timezone..deps import DbSession, CurrentUser
+from ..deps import DbSession, CurrentUser
 from ...models.user import User
 from ...core.security import (
     get_password_hash, 
