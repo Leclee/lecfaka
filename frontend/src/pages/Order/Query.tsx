@@ -40,15 +40,17 @@ export default function Query() {
     { key: 'logout', label: '退出登录', icon: <LogoutOutlined />, onClick: handleLogout, danger: true },
   ].filter(Boolean)
 
-  const handleSearch = async () => {
-    if (!keyword.trim()) {
+  const handleSearch = async (val?: string | React.MouseEvent | React.KeyboardEvent<HTMLInputElement>) => {
+    const searchKeyword = typeof val === 'string' ? val : keyword
+    const targetKeyword = searchKeyword.trim()
+    if (!targetKeyword) {
       message.warning('请输入订单号或联系方式')
       return
     }
 
     setLoading(true)
     try {
-      const res = await queryOrders(keyword.trim())
+      const res = await queryOrders(targetKeyword)
       setOrders(res.items)
       if (res.items.length === 0) {
         message.info('未找到相关订单')
