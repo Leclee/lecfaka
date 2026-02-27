@@ -1,6 +1,12 @@
 """
 应用配置管理
 使用 pydantic-settings 管理环境变量
+
+密钥说明：
+  secret_key 和 jwt_secret_key 不再由 .env 或代码默认值管理，
+  改为在应用启动时从数据库 system_configs 表自动加载。
+  首次启动时自动生成强随机密钥并持久化到数据库。
+  参见 main.py 中的 _init_secret_keys() 函数。
 """
 
 from functools import lru_cache
@@ -21,7 +27,10 @@ class Settings(BaseSettings):
     app_name: str = "LecFaka"
     app_env: str = "development"
     debug: bool = True
-    secret_key: str = ""  ## 留空 → 首次启动自动生成
+    
+    ## 密钥（启动时由 main.py 从数据库加载，不要在 .env 中配置）
+    secret_key: str = ""
+    jwt_secret_key: str = ""
     
     # 数据库配置（默认值与 docker-compose.yml 一致）
     database_url: str = "postgresql+asyncpg://lecfaka:lecfaka123@localhost:5432/lecfaka"
@@ -30,7 +39,6 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     
     # JWT配置
-    jwt_secret_key: str = ""  ## 留空 → 首次启动自动生成
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7
@@ -64,34 +72,3 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
-
-## 密钥自动生成：为空时生成随机密钥并写入 .env
-## 仅在首次安装（.env 中未配置密钥）时触发
-## 已有部署请确保 .env 中已包含 SECRET_KEY 和 JWT_SECRET_KEY
-_keys_to_generate = []
-if not settings.secret_key:
-    _keys_to_generate.append("SECRET_KEY")
-if not settings.jwt_secret_key:
-    _keys_to_generate.append("JWT_SECRET_KEY")
-
-if _keys_to_generate:
-    import secrets as _secrets
-    import os as _os
-    import logging as _log
-    
-    _env_path = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(__file__))), ".env")
-    _lines_to_append = []
-    
-    for _key_name in _keys_to_generate:
-        _generated = _secrets.token_urlsafe(32)
-        setattr(settings, _key_name.lower(), _generated)
-        _lines_to_append.append(f"{_key_name}={_generated}")
-    
-    try:
-        with open(_env_path, "a", encoding="utf-8") as _f:
-            _f.write("\n## 自动生成的签名密钥（请勿删除）\n")
-            for _line in _lines_to_append:
-                _f.write(f"{_line}\n")
-        _log.info(f"[config] 密钥已自动生成并写入 {_env_path}")
-    except Exception as _e:
-        _log.warning(f"[config] 密钥已自动生成但无法写入 .env: {_e}（本次运行有效，重启后会重新生成）")

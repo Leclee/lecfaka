@@ -28,6 +28,28 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[WARN] Database init error: {e}")
     
+    # 从数据库加载（或首次生成）签名密钥
+    try:
+        import secrets as _sec
+        from .models.config import SystemConfig
+        async with async_session_maker() as db:
+            for key_name, attr_name in [
+                ("secret_key", "secret_key"),
+                ("jwt_secret_key", "jwt_secret_key"),
+            ]:
+                val = await SystemConfig.get_value(db, key_name)
+                if val:
+                    setattr(settings, attr_name, val)
+                else:
+                    generated = _sec.token_urlsafe(32)
+                    await SystemConfig.set_value(db, key_name, generated)
+                    setattr(settings, attr_name, generated)
+                    print(f"[OK] 已自动生成 {key_name} 并保存到数据库")
+            await db.commit()
+        print("[OK] Secret keys loaded from database")
+    except Exception as e:
+        print(f"[WARN] Secret key init error: {e}")
+    
     # 管理员由 Web 安装向导创建，不再从环境变量自动创建
     try:
         async with async_session_maker() as db:
