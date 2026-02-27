@@ -81,9 +81,9 @@ async def get_log_stats(
     db: DbSession,
 ):
     """获取日志统计"""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
     
-    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     
     # 总数
     total = (await db.execute(

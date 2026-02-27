@@ -8,7 +8,7 @@ from datetime import timezone
 
 import json as json_lib
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, Dict, Any, List
 from sqlalchemy import select, func
@@ -512,7 +512,7 @@ class OrderService:
         
         # 完成订单
         order.status = 1
-        order.paid_at = datetime.now(timezone.utc)
+        order.paid_at = datetime.now()
         order.external_trade_no = callback_result.external_trade_no
         
         # 钩子
@@ -572,7 +572,7 @@ class OrderService:
             if card:
                 card.status = 1
                 card.order_id = order.id
-                card.sold_at = datetime.now(timezone.utc)
+                card.sold_at = datetime.now()
                 return card.secret
             return "预选卡密已被售出"
         
@@ -606,7 +606,7 @@ class OrderService:
         for card in cards:
             card.status = 1
             card.order_id = order.id
-            card.sold_at = datetime.now(timezone.utc)
+            card.sold_at = datetime.now()
             secrets.append(card.secret)
         
         return "\n".join(secrets)
@@ -735,7 +735,7 @@ class OrderService:
             raise ValidationError("该优惠券不适用于此商品")
         if coupon.category_id and coupon.category_id != commodity.category_id:
             raise ValidationError("该优惠券不适用于此分类")
-        if coupon.expires_at and coupon.expires_at < datetime.now(timezone.utc):
+        if coupon.expires_at and coupon.expires_at < datetime.now():
             raise ValidationError("优惠券已过期")
         if float(coupon.money) >= amount:
             raise ValidationError("优惠券面额大于订单金额")
@@ -753,7 +753,7 @@ class OrderService:
             coupon.use_life += 1
             coupon.life -= 1
             coupon.trade_no = trade_no
-            coupon.used_at = datetime.now(timezone.utc)
+            coupon.used_at = datetime.now()
             if coupon.life <= 0:
                 coupon.status = 1
         
@@ -797,7 +797,7 @@ class OrderService:
         
         # 更新订单状态
         order.status = 1
-        order.paid_at = datetime.now(timezone.utc)
+        order.paid_at = datetime.now()
     
     async def _create_payment(
         self,

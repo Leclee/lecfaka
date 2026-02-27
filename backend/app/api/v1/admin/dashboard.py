@@ -3,7 +3,7 @@ from datetime import timezone
 管理后台 - 仪表盘
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import List
 from fastapi import APIRouter
 from sqlalchemy import select, func, text
@@ -28,7 +28,7 @@ async def get_dashboard(
 ):
     """获取管理后台仪表盘统计数据"""
     
-    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday = today - timedelta(days=1)
     this_week = today - timedelta(days=today.weekday())
     this_month = today.replace(day=1)
@@ -216,7 +216,7 @@ async def get_chart_data(
     days: int = 7,
 ):
     """获取近N天的销售图表数据"""
-    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     
     chart_data = []
     for i in range(days - 1, -1, -1):

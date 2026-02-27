@@ -3,7 +3,7 @@ from datetime import timezone
 管理后台 - 卡密管理
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
@@ -251,7 +251,7 @@ async def batch_update_cards_status(
             continue
         card.status = request.status
         if request.status == 1:
-            card.sold_at = datetime.now(timezone.utc)
+            card.sold_at = datetime.now()
         updated_count += 1
     
     await db.flush()

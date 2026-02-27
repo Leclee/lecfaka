@@ -5,7 +5,7 @@ from datetime import timezone
 
 import secrets
 from typing import Optional, List
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, or_
@@ -175,7 +175,7 @@ async def create_coupons(
     created_codes = []
     expires_at = None
     if data.expires_days:
-        expires_at = datetime.now(timezone.utc) + timedelta(days=data.expires_days)
+        expires_at = datetime.now() + timedelta(days=data.expires_days)
     
     for _ in range(data.count):
         # 生成唯一优惠券码

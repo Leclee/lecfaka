@@ -3,7 +3,7 @@
 """
 
 from typing import Optional
-from datetime import datetime, timezone, timezone
+from datetime import datetime, timezone
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
@@ -174,7 +174,7 @@ async def review_withdrawal(
     
     withdrawal.admin_id = admin.id
     withdrawal.admin_remark = data.remark
-    withdrawal.reviewed_at = datetime.now(timezone.utc)
+    withdrawal.reviewed_at = datetime.now()
     
     return {"message": "操作成功"}
 
@@ -199,7 +199,7 @@ async def paid_withdrawal(
         raise ValidationError("只能对已审核的提现进行打款确认")
     
     withdrawal.status = 2
-    withdrawal.paid_at = datetime.now(timezone.utc)
+    withdrawal.paid_at = datetime.now()
     if data.remark:
         withdrawal.admin_remark = data.remark
     

@@ -3,7 +3,7 @@
 """
 
 import json as json_lib
-from datetime import datetime, timezone, timezone
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, List
 from fastapi import APIRouter, Query, Request
@@ -573,7 +573,7 @@ async def create_recharge(
     if actual_amount <= 0:
         raise ValidationError("Actual recharge amount must be greater than 0")
 
-    trade_no = f"R{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}{uuid.uuid4().hex[:8].upper()}"
+    trade_no = f"R{datetime.now().strftime('%Y%m%d%H%M%S')}{uuid.uuid4().hex[:8].upper()}"
     recharge = RechargeOrder(
         trade_no=trade_no,
         user_id=user.id,

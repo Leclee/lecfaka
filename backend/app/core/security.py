@@ -11,7 +11,7 @@ import secrets
 import hashlib
 import time
 import uuid
-from datetime import datetime, timedelta, timezone, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import bcrypt
@@ -82,9 +82,9 @@ def create_access_token(
     """创建访问Token"""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = datetime.now() + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(
+        expire = datetime.now() + timedelta(
             minutes=settings.jwt_access_token_expire_minutes
         )
     to_encode.update({"exp": expire, "type": "access"})
@@ -103,9 +103,9 @@ def create_refresh_token(
     """创建刷新Token"""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = datetime.now() + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(
+        expire = datetime.now() + timedelta(
             days=settings.jwt_refresh_token_expire_days
         )
     to_encode.update({"exp": expire, "type": "refresh"})

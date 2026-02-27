@@ -4,7 +4,7 @@
 
 import json
 import logging
-from datetime import datetime, timezone, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Request
@@ -123,7 +123,7 @@ async def _handle_callback(handler: str, request: Request, db):
             return payment_instance.get_callback_response(False)
 
         recharge_order.status = 1
-        recharge_order.paid_at = datetime.now(timezone.utc)
+        recharge_order.paid_at = datetime.now()
         recharge_order.external_trade_no = callback_result.external_trade_no
 
         user.balance = Decimal(str(user.balance or 0)) + Decimal(str(recharge_order.actual_amount or 0))
@@ -174,7 +174,7 @@ async def _handle_callback(handler: str, request: Request, db):
     
     # 7. 更新订单状态为已支付
     order.status = 1
-    order.paid_at = datetime.now(timezone.utc)
+    order.paid_at = datetime.now()
     order.external_trade_no = callback_result.external_trade_no
     
     # 8. 钩子：支付回调 + 支付成功

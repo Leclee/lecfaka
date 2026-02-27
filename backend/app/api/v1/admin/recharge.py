@@ -98,9 +98,9 @@ async def get_recharge_stats(
     db: DbSession,
 ):
     """获取充值统计"""
-    from datetime import datetime, timezone, timedelta, timezone
+    from datetime import datetime, timedelta, timezone
     
-    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     
     # 总订单数
     total_count = await db.execute(
@@ -141,7 +141,7 @@ async def complete_recharge(
     db: DbSession,
 ):
     """手动完成充值订单"""
-    from datetime import datetime, timezone, timezone
+    from datetime import datetime, timezone
     from ....models.bill import Bill
     
     result = await db.execute(
@@ -157,7 +157,7 @@ async def complete_recharge(
     
     # 更新订单状态
     order.status = 1
-    order.paid_at = datetime.now(timezone.utc)
+    order.paid_at = datetime.now()
     
     # 增加用户余额
     user_result = await db.execute(

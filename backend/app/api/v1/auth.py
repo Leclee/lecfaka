@@ -2,7 +2,7 @@
 认证接口
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, EmailStr, Field
@@ -183,7 +183,7 @@ async def login(
         raise AuthenticationError("账户已被禁用")
     
     # 更新登录信息
-    user.last_login_at = datetime.now(timezone.utc)
+    user.last_login_at = datetime.now()
     user.last_login_ip = req.client.host if req.client else None
     
     # 钩子：用户登录
