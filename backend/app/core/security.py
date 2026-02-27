@@ -3,6 +3,7 @@
 包含密码加密、JWT Token生成验证等
 
 v2.0: 密码哈希从 SHA256 迁移到 bcrypt（兼容旧格式自动升级）
+      直接使用 bcrypt 库，不再依赖已停止维护的 passlib
 """
 
 import secrets
@@ -12,13 +13,10 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from ..config import settings
-
-## bcrypt 密码上下文
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 ## bcrypt 哈希的特征前缀
 _BCRYPT_PREFIX = "$2b$"
@@ -31,17 +29,18 @@ def generate_salt(length: int = 16) -> str:
 
 def get_password_hash(password: str, salt: str = None) -> tuple[str, str]:
     """
-    生成密码哈希。
+    生成密码哈希（bcrypt）。
 
-    v2.0: 使用 bcrypt，salt 参数仅为保持接口兼容。
     bcrypt 内部自带盐值管理，返回的 salt 字段为 "bcrypt" 标记。
+    bcrypt 限制密码最大 72 字节，超长自动截断。
 
     @param password 明文密码
     @param salt 忽略（兼容旧接口）
     @return (bcrypt_hash, "bcrypt")
     """
-    hashed = pwd_context.hash(password)
-    return hashed, "bcrypt"
+    pwd_bytes = password.encode("utf-8")[:72]  ## bcrypt 72字节限制
+    hashed = bcrypt.hashpw(pwd_bytes, bcrypt.gensalt())
+    return hashed.decode("utf-8"), "bcrypt"
 
 
 def _verify_legacy_sha256(plain_password: str, hashed_password: str, salt: str) -> bool:
@@ -59,7 +58,8 @@ def verify_password(plain_password: str, hashed_password: str, salt: str) -> boo
     - 旧格式（SHA256）: 其它情况，使用 salt + secret_key 重新计算
     """
     if hashed_password.startswith(_BCRYPT_PREFIX):
-        return pwd_context.verify(plain_password, hashed_password)
+        pwd_bytes = plain_password.encode("utf-8")[:72]
+        return bcrypt.checkpw(pwd_bytes, hashed_password.encode("utf-8"))
     else:
         return _verify_legacy_sha256(plain_password, hashed_password, salt)
 
@@ -67,7 +67,7 @@ def verify_password(plain_password: str, hashed_password: str, salt: str) -> boo
 def needs_rehash(hashed_password: str) -> bool:
     """
     检查密码是否需要重新哈希（旧 SHA256 格式需要升级到 bcrypt）。
-    
+
     @param hashed_password 当前存储的哈希值
     @return True 表示需要升级
     """
@@ -139,8 +139,6 @@ def generate_trade_no() -> str:
     生成24位订单号（高并发安全）。
 
     格式: 14位微秒时间戳 + 10位随机十六进制 = 24位。
-    uuid4 提供 122 位随机性，截取 10 位十六进制仍有 ~40 bit 熵，
-    远大于旧版 5 位十进制（~17 bit），碰撞概率降低约 800 万倍。
     数据库 trade_no 列有 UNIQUE 约束作为最终兜底。
     """
     timestamp = int(time.time() * 1000000)  # 14位微秒时间戳
